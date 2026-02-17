@@ -3,8 +3,9 @@ import Foundation
 /// Manages recording sessions stored in ~/recordings/{YYYY-MM-DD_HH-MM-SS}/
 /// Handles CRUD operations, file I/O, and session metadata.
 @MainActor
-final class SessionManager: ObservableObject {
-    @Published var sessions: [Session] = []
+@Observable
+final class SessionManager {
+    var sessions: [Session] = []
 
     private let recordingsDir: URL
 

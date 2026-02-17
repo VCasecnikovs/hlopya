@@ -5,10 +5,11 @@ import ScreenCaptureKit
 /// Captures system audio via ScreenCaptureKit and microphone via AVAudioEngine.
 /// Replaces the external audiocap subprocess - everything runs in-process.
 @MainActor
-final class AudioCaptureService: ObservableObject {
-    @Published private(set) var isRecording = false
-    @Published private(set) var elapsedTime: TimeInterval = 0
-    @Published var lastError: String?
+@Observable
+final class AudioCaptureService {
+    private(set) var isRecording = false
+    private(set) var elapsedTime: TimeInterval = 0
+    var lastError: String?
 
     private var systemCapture: SystemAudioCapture?
     private var micRecorder: MicRecorder?

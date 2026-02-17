@@ -4,10 +4,11 @@ import FluidAudio
 /// Transcription service using FluidAudio's Parakeet v3 CoreML model.
 /// Replaces the Python transcriber.py pipeline.
 @MainActor
-final class TranscriptionService: ObservableObject {
-    @Published private(set) var isModelLoaded = false
-    @Published private(set) var isDownloading = false
-    @Published private(set) var downloadProgress: Double = 0
+@Observable
+final class TranscriptionService {
+    private(set) var isModelLoaded = false
+    private(set) var isDownloading = false
+    private(set) var downloadProgress: Double = 0
 
     private var asrManager: AsrManager?
     private var models: AsrModels?
