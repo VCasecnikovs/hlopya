@@ -106,10 +106,12 @@ final class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
     }
 
     func start() async throws {
+        NSLog("[SystemAudio] Getting shareable content...")
         let content = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: false)
         guard let display = content.displays.first else {
             throw AudioCaptureError.noDisplays
         }
+        NSLog("[SystemAudio] Display: %@, apps: %d", display.debugDescription, content.applications.count)
 
         let config = SCStreamConfiguration()
         config.capturesAudio = true
@@ -117,18 +119,24 @@ final class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
         config.sampleRate = targetRate
         config.channelCount = 1
 
-        // Audio-only: no video capture. On macOS 15+ this makes the app
-        // appear under "System Audio Recording Only" instead of "Screen Recording"
-        config.width = 1
-        config.height = 1
-        config.minimumFrameInterval = CMTime(value: 1, timescale: CMTimeScale.max)
+        // Minimal video - required by SCStream but we don't use it
+        config.width = 2
+        config.height = 2
+        config.minimumFrameInterval = CMTime(value: 1, timescale: 1)
         config.showsCursor = false
 
         let filter = SCContentFilter(display: display, excludingApplications: [], exceptingWindows: [])
         stream = SCStream(filter: filter, configuration: config, delegate: self)
-        // Only audio output - no video output added
         try stream!.addStreamOutput(self, type: .audio, sampleHandlerQueue: DispatchQueue(label: "hlopya.audio-queue"))
-        try await stream!.startCapture()
+
+        do {
+            try await stream!.startCapture()
+            NSLog("[SystemAudio] Stream started OK")
+        } catch {
+            NSLog("[SystemAudio] startCapture FAILED: %@ (code: %d)", error.localizedDescription, (error as NSError).code)
+            NSLog("[SystemAudio] Full error: %@", "\(error)")
+            throw error
+        }
     }
 
     func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
