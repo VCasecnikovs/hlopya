@@ -1,0 +1,194 @@
+import SwiftUI
+
+/// Central application state - coordinates all services.
+@MainActor
+@Observable
+final class AppViewModel {
+    // Services
+    let sessionManager = SessionManager()
+    let audioCapture = AudioCaptureService()
+    let transcriptionService = TranscriptionService()
+    let noteGeneration = NoteGenerationService()
+    let obsidianExporter = ObsidianExporter()
+
+    // State
+    var selectedSessionId: String?
+    var isProcessing = false
+    var processingSessionId: String?
+    var processLog: String = ""
+    var showSettings = false
+
+    // Detail data (loaded on selection)
+    var detailTranscript: String?
+    var detailNotes: MeetingNotes?
+    var detailPersonalNotes: String = ""
+    var detailMeta: SessionMeta?
+
+    var selectedSession: Session? {
+        sessionManager.sessions.first { $0.id == selectedSessionId }
+    }
+
+    // MARK: - Recording
+
+    func startRecording() async {
+        do {
+            let session = try sessionManager.createSession()
+            try await audioCapture.startRecording(sessionDir: session.directoryURL)
+            selectedSessionId = session.id
+        } catch {
+            print("[App] Recording failed: \(error)")
+        }
+    }
+
+    func stopRecording() async {
+        let sessionId = selectedSessionId
+        await audioCapture.stopRecording()
+        sessionManager.loadSessions()
+
+        if let id = sessionId {
+            selectSession(id)
+            // Auto-process
+            await processSession(id)
+        }
+    }
+
+    func toggleRecording() async {
+        if audioCapture.isRecording {
+            await stopRecording()
+        } else {
+            await startRecording()
+        }
+    }
+
+    // MARK: - Session Selection
+
+    func selectSession(_ id: String) {
+        selectedSessionId = id
+        loadSessionDetail(id)
+    }
+
+    private func loadSessionDetail(_ id: String) {
+        detailTranscript = sessionManager.loadTranscriptMarkdown(sessionId: id)
+        detailNotes = sessionManager.loadNotes(sessionId: id)
+        detailPersonalNotes = sessionManager.loadPersonalNotes(sessionId: id)
+
+        let dir = Session.recordingsDirectory.appendingPathComponent(id)
+        let metaPath = dir.appendingPathComponent("meta.json")
+        if let data = try? Data(contentsOf: metaPath) {
+            detailMeta = try? JSONDecoder().decode(SessionMeta.self, from: data)
+        } else {
+            detailMeta = nil
+        }
+    }
+
+    // MARK: - Processing
+
+    func processSession(_ sessionId: String) async {
+        isProcessing = true
+        processingSessionId = sessionId
+        processLog = "Starting transcription...\n"
+
+        do {
+            // Ensure model is loaded
+            if !transcriptionService.isModelLoaded {
+                processLog += "Loading STT model...\n"
+                try await transcriptionService.loadModel()
+                processLog += "Model loaded.\n"
+            }
+
+            // Transcribe
+            processLog += "Transcribing audio...\n"
+            let sessionDir = Session.recordingsDirectory.appendingPathComponent(sessionId)
+            let transcript = try await transcriptionService.transcribeMeeting(sessionDir: sessionDir)
+            try sessionManager.saveTranscript(transcript, sessionId: sessionId)
+            processLog += "Transcription done: \(transcript.numSegments) segments\n"
+
+            // Generate notes
+            processLog += "Generating notes with Claude...\n"
+            let personalNotes = sessionManager.loadPersonalNotes(sessionId: sessionId)
+            let notes = try await noteGeneration.generateNotes(
+                transcript: transcript,
+                meta: detailMeta,
+                personalNotes: personalNotes.isEmpty ? nil : personalNotes
+            )
+            try sessionManager.saveNotes(notes, sessionId: sessionId)
+            processLog += "Notes generated.\n"
+
+            // Export to Obsidian
+            let obsidianPath = try obsidianExporter.export(notes: notes, sessionId: sessionId)
+            processLog += "Exported to Obsidian: \(obsidianPath.lastPathComponent)\n"
+
+            processLog += "\nDone!\n"
+        } catch {
+            processLog += "\nError: \(error.localizedDescription)\n"
+        }
+
+        isProcessing = false
+        processingSessionId = nil
+        sessionManager.loadSessions()
+        if let id = selectedSessionId {
+            loadSessionDetail(id)
+        }
+    }
+
+    func transcribeSession(_ sessionId: String) async {
+        isProcessing = true
+        processingSessionId = sessionId
+        processLog = "Starting transcription...\n"
+
+        do {
+            if !transcriptionService.isModelLoaded {
+                processLog += "Loading STT model...\n"
+                try await transcriptionService.loadModel()
+            }
+
+            let sessionDir = Session.recordingsDirectory.appendingPathComponent(sessionId)
+            let transcript = try await transcriptionService.transcribeMeeting(sessionDir: sessionDir)
+            try sessionManager.saveTranscript(transcript, sessionId: sessionId)
+            processLog += "Done: \(transcript.numSegments) segments\n"
+        } catch {
+            processLog += "Error: \(error.localizedDescription)\n"
+        }
+
+        isProcessing = false
+        processingSessionId = nil
+        sessionManager.loadSessions()
+        if let id = selectedSessionId {
+            loadSessionDetail(id)
+        }
+    }
+
+    // MARK: - Auto-save
+
+    private var notesSaveTask: Task<Void, Never>?
+
+    func savePersonalNotes(_ text: String) {
+        guard let id = selectedSessionId else { return }
+        detailPersonalNotes = text
+
+        notesSaveTask?.cancel()
+        notesSaveTask = Task {
+            try? await Task.sleep(for: .milliseconds(500))
+            guard !Task.isCancelled else { return }
+            sessionManager.savePersonalNotes(sessionId: id, text: text)
+        }
+    }
+
+    func saveEnrichedNotes(_ text: String) {
+        guard let id = selectedSessionId else { return }
+        sessionManager.saveEnrichedNotes(sessionId: id, text: text)
+    }
+
+    // MARK: - Metadata
+
+    func renameSession(_ title: String) {
+        guard let id = selectedSessionId else { return }
+        sessionManager.renameSession(id, title: title)
+    }
+
+    func renameParticipant(oldName: String, newName: String) {
+        guard let id = selectedSessionId else { return }
+        sessionManager.renameParticipant(sessionId: id, oldName: oldName, newName: newName)
+        loadSessionDetail(id)
+    }
+}
