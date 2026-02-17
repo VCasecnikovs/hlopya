@@ -22,6 +22,20 @@ struct ContentView: View {
             // Status bar
             statusBar
         }
+        .alert("Recording Error", isPresented: Binding(
+            get: { vm.audioCapture.lastError != nil },
+            set: { if !$0 { vm.audioCapture.lastError = nil } }
+        )) {
+            Button("Open System Settings") {
+                NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")!)
+                vm.audioCapture.lastError = nil
+            }
+            Button("OK", role: .cancel) {
+                vm.audioCapture.lastError = nil
+            }
+        } message: {
+            Text(vm.audioCapture.lastError ?? "Unknown error")
+        }
     }
 
     private var statusBar: some View {

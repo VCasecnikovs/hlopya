@@ -32,21 +32,27 @@ final class AppViewModel {
     // MARK: - Recording
 
     func startRecording() async {
+        var createdSessionId: String?
         do {
+            NSLog("[Hlopya] Creating session...")
             let session = try sessionManager.createSession()
+            createdSessionId = session.id
             // Save participant info if set
             if !pendingParticipant.isEmpty {
                 sessionManager.setParticipant(sessionId: session.id, name: pendingParticipant)
                 pendingParticipant = ""
             }
+            NSLog("[Hlopya] Starting recording at %@", session.directoryURL.path)
             try await audioCapture.startRecording(sessionDir: session.directoryURL)
             selectedSessionId = session.id
+            NSLog("[Hlopya] Recording started OK")
         } catch {
-            audioCapture.lastError = error.localizedDescription
-            print("[App] Recording failed: \(error)")
-            // Clean up failed session
-            if let session = sessionManager.sessions.first {
-                try? sessionManager.deleteSession(session.id)
+            let msg = error.localizedDescription
+            NSLog("[Hlopya] Recording FAILED: %@", msg)
+            audioCapture.lastError = msg
+            // Clean up the failed session we just created
+            if let id = createdSessionId {
+                try? sessionManager.deleteSession(id)
             }
         }
     }

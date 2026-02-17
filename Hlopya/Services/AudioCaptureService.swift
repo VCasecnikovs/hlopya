@@ -30,12 +30,6 @@ final class AudioCaptureService: ObservableObject {
     func startRecording(sessionDir: URL) async throws {
         lastError = nil
 
-        // Check screen recording permission
-        if !CGPreflightScreenCaptureAccess() {
-            CGRequestScreenCaptureAccess()
-            throw AudioCaptureError.permissionDenied
-        }
-
         // Check microphone permission
         switch AVCaptureDevice.authorizationStatus(for: .audio) {
         case .authorized:
@@ -50,7 +44,9 @@ final class AudioCaptureService: ObservableObject {
         let sysPath = sessionDir.appendingPathComponent("system.wav").path
         let micPath = sessionDir.appendingPathComponent("mic.wav").path
 
-        // System audio via ScreenCaptureKit (audio-only, no screen content)
+        // System audio via ScreenCaptureKit (audio-only)
+        // Don't pre-check CGPreflightScreenCaptureAccess - it only checks
+        // Screen Recording, not "System Audio Recording Only" (macOS 15+)
         let sysWriter = try WAVWriter(path: sysPath, sampleRate: sampleRate)
         systemCapture = SystemAudioCapture(writer: sysWriter, targetRate: sampleRate)
         try await systemCapture!.start()
@@ -62,6 +58,7 @@ final class AudioCaptureService: ObservableObject {
 
         startTime = Date()
         isRecording = true
+        elapsedTime = 0
 
         // Update elapsed time every second
         timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
