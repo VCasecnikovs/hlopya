@@ -25,6 +25,6 @@
 	<key>NSScreenCaptureUsageDescription</key>
 	<string>Hlopya needs screen recording permission to capture system audio from your meetings.</string>
 	<key>LSUIElement</key>
-	<true/>
+	<false/>
 </dict>
 </plist>
