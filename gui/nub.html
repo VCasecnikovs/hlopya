@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * { margin: 0; padding: 0; }
+    body {
+      background: transparent;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 56px;
+      width: 56px;
+      -webkit-app-region: drag;
+      cursor: pointer;
+    }
+    .nub {
+      width: 48px;
+      height: 48px;
+      border-radius: 14px;
+      background: rgba(255, 71, 87, 0.9);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 2px 12px rgba(255, 71, 87, 0.4);
+      animation: breathe 2s infinite;
+    }
+    @keyframes breathe {
+      0%, 100% { transform: scale(1); box-shadow: 0 2px 12px rgba(255, 71, 87, 0.4); }
+      50% { transform: scale(1.05); box-shadow: 0 2px 20px rgba(255, 71, 87, 0.6); }
+    }
+    .bars {
+      display: flex;
+      gap: 2px;
+      align-items: center;
+      height: 16px;
+    }
+    .bar {
+      width: 3px;
+      background: white;
+      border-radius: 2px;
+      animation: wave 0.8s infinite;
+    }
+    .bar:nth-child(1) { height: 8px; animation-delay: 0s; }
+    .bar:nth-child(2) { height: 14px; animation-delay: 0.1s; }
+    .bar:nth-child(3) { height: 10px; animation-delay: 0.2s; }
+    .bar:nth-child(4) { height: 14px; animation-delay: 0.3s; }
+    .bar:nth-child(5) { height: 8px; animation-delay: 0.4s; }
+    @keyframes wave {
+      0%, 100% { transform: scaleY(1); }
+      50% { transform: scaleY(0.5); }
+    }
+    .time {
+      color: white;
+      font-size: 9px;
+      font-weight: 700;
+      font-family: -apple-system, 'SF Pro', sans-serif;
+      margin-top: 2px;
+    }
+  </style>
+</head>
+<body onclick="window.api.showMain()">
+  <div class="nub">
+    <div class="bars">
+      <div class="bar"></div>
+      <div class="bar"></div>
+      <div class="bar"></div>
+      <div class="bar"></div>
+      <div class="bar"></div>
+    </div>
+    <div class="time" id="time">00:00</div>
+  </div>
+  <script>
+    window.api.onRecTime((t) => { document.getElementById('time').textContent = t; });
+  </script>
+</body>
+</html>

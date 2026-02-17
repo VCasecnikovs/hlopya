@@ -1,0 +1,1043 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Meeting Recorder</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg: #0f0f17;
+      --bg-sidebar: #151520;
+      --bg-hover: #1e1e30;
+      --bg-selected: #252540;
+      --surface: #1a1a2e;
+      --border: #2a2a40;
+      --text: #e4e4ef;
+      --text-dim: #8888a0;
+      --text-muted: #555570;
+      --accent: #6c63ff;
+      --accent-hover: #7b73ff;
+      --red: #ff4757;
+      --red-glow: rgba(255, 71, 87, 0.3);
+      --green: #2ed573;
+      --green-dim: #1a9c50;
+      --yellow: #ffa502;
+      --cyan: #45aaf2;
+      --radius: 8px;
+      --font: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
+      --mono: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+      -webkit-app-region: drag;
+      user-select: none;
+    }
+
+    /* ─── Sidebar ─── */
+    #sidebar {
+      width: 280px;
+      min-width: 280px;
+      background: var(--bg-sidebar);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      -webkit-app-region: no-drag;
+    }
+
+    #sidebar-header {
+      padding: 52px 16px 12px;
+      -webkit-app-region: drag;
+    }
+
+    #sidebar-header h1 {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    #rec-controls {
+      padding: 8px 12px;
+      display: flex;
+      gap: 8px;
+    }
+
+    .btn {
+      flex: 1;
+      padding: 10px 16px;
+      border: none;
+      border-radius: var(--radius);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+      font-family: var(--font);
+    }
+
+    .btn-record {
+      background: var(--green-dim);
+      color: white;
+    }
+    .btn-record:hover { background: var(--green); }
+    .btn-record.recording {
+      background: var(--red);
+      animation: pulse-red 1.5s infinite;
+    }
+    .btn-record.recording:hover { background: #ff6b7a; }
+
+    @keyframes pulse-red {
+      0%, 100% { box-shadow: 0 0 0 0 var(--red-glow); }
+      50% { box-shadow: 0 0 0 8px transparent; }
+    }
+
+    .btn-secondary {
+      background: var(--bg-hover);
+      color: var(--text-dim);
+      flex: none;
+      padding: 10px 12px;
+    }
+    .btn-secondary:hover { background: var(--bg-selected); color: var(--text); }
+
+    #rec-status-bar {
+      padding: 4px 16px 8px;
+      font-size: 12px;
+      color: var(--text-muted);
+      display: none;
+    }
+    #rec-status-bar.active {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--red);
+    }
+    #rec-status-bar .dot {
+      width: 8px; height: 8px;
+      background: var(--red);
+      border-radius: 50%;
+      animation: blink 1s infinite;
+    }
+    @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+    #session-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 4px 8px;
+    }
+
+    .session-item {
+      padding: 10px 12px;
+      border-radius: var(--radius);
+      cursor: pointer;
+      transition: background 0.1s;
+      margin-bottom: 2px;
+    }
+    .session-item:hover { background: var(--bg-hover); }
+    .session-item.selected { background: var(--bg-selected); }
+
+    .session-item .session-title {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .session-item .session-meta {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 3px;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .badge {
+      font-size: 10px;
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .badge-rec { background: rgba(255,165,2,0.15); color: var(--yellow); }
+    .badge-stt { background: rgba(69,170,242,0.15); color: var(--cyan); }
+    .badge-done { background: rgba(46,213,115,0.15); color: var(--green); }
+    .badge-processing { background: rgba(108,99,255,0.15); color: var(--accent); animation: blink 1s infinite; }
+
+    /* ─── Main ─── */
+    #main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      -webkit-app-region: no-drag;
+    }
+
+    #main-header {
+      padding: 52px 24px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      -webkit-app-region: drag;
+    }
+
+    #main-header h2 {
+      font-size: 16px;
+      font-weight: 600;
+      flex: 1;
+      -webkit-app-region: no-drag;
+      cursor: pointer;
+      padding: 2px 6px;
+      border-radius: 4px;
+      border: 1px solid transparent;
+      transition: border-color 0.15s;
+    }
+    #main-header h2:hover {
+      border-color: var(--border);
+    }
+    #main-header h2.editing {
+      border-color: var(--accent);
+      outline: none;
+    }
+
+    .btn-sm {
+      padding: 6px 14px;
+      font-size: 12px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-dim);
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 500;
+      font-family: var(--font);
+      transition: all 0.15s;
+      -webkit-app-region: no-drag;
+    }
+    .btn-sm:hover { border-color: var(--accent); color: var(--accent); }
+    .btn-sm.processing { color: var(--cyan); border-color: var(--cyan); cursor: wait; }
+
+    #content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px;
+      -webkit-app-region: no-drag;
+      user-select: text;
+    }
+
+    #empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      color: var(--text-muted);
+    }
+    #empty-state .icon { font-size: 48px; margin-bottom: 16px; }
+    #empty-state p { font-size: 14px; }
+
+    /* ─── Metadata bar ─── */
+    .meta-bar {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      padding: 10px 0 16px;
+      margin-bottom: 20px;
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+      color: var(--text-dim);
+      flex-wrap: wrap;
+    }
+    .meta-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .meta-item .meta-icon {
+      font-size: 13px;
+      opacity: 0.7;
+    }
+    .meta-item .meta-label {
+      color: var(--text-muted);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .participant-chip {
+      display: inline-block;
+      padding: 1px 8px;
+      background: var(--bg-hover);
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.15s;
+      border: 1px solid transparent;
+    }
+    .participant-chip:hover {
+      border-color: var(--accent);
+      background: var(--bg-selected);
+    }
+    .participant-chip.editing {
+      border-color: var(--accent);
+      outline: none;
+      background: var(--surface);
+    }
+
+    .detail-section {
+      margin-bottom: 24px;
+    }
+    .detail-section h3 {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 12px;
+    }
+
+    .transcript-line {
+      padding: 6px 0;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+    .transcript-line .speaker {
+      font-weight: 600;
+      color: var(--green);
+    }
+    .transcript-line .speaker.them {
+      color: var(--cyan);
+    }
+    .transcript-line .timestamp {
+      color: var(--text-muted);
+      font-size: 11px;
+      font-family: var(--mono);
+    }
+
+    .notes-content {
+      font-size: 14px;
+      line-height: 1.7;
+      color: var(--text);
+    }
+    .notes-content h4 { margin-top: 16px; margin-bottom: 6px; color: var(--text); }
+    .notes-content ul { padding-left: 20px; }
+    .notes-content li { margin-bottom: 4px; }
+
+    /* Enriched notes: user's bold lines have accent left border */
+    .enriched-notes {
+      cursor: text;
+    }
+    .enriched-notes[contenteditable="true"] {
+      outline: none;
+      border: 1px solid var(--accent);
+      border-radius: var(--radius);
+      padding: 12px 16px;
+      margin: -12px -16px;
+    }
+    .enriched-notes .user-note {
+      border-left: 3px solid var(--accent);
+      padding-left: 10px;
+      margin: 12px 0 4px;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .enriched-notes .ai-context {
+      padding-left: 13px;
+      color: var(--text-dim);
+      margin-bottom: 8px;
+      line-height: 1.7;
+    }
+    .enriched-notes h2 {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text);
+      margin-top: 24px;
+      margin-bottom: 10px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--border);
+    }
+    .enriched-notes h2:first-child {
+      margin-top: 0;
+    }
+    .edit-hint {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 6px;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .edit-hint.show { opacity: 1; }
+
+    .action-item {
+      padding: 8px 12px;
+      background: var(--surface);
+      border-radius: var(--radius);
+      margin-bottom: 6px;
+      border-left: 3px solid var(--accent);
+    }
+    .action-item .owner { color: var(--accent); font-weight: 600; font-size: 12px; }
+    .action-item .task { font-size: 13px; }
+    .action-item .deadline { font-size: 11px; color: var(--text-muted); }
+
+    /* ─── Notes textarea ─── */
+    .notes-area {
+      width: 100%;
+      min-height: 200px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 14px;
+      line-height: 1.6;
+      padding: 12px 16px;
+      resize: vertical;
+      outline: none;
+      transition: border-color 0.15s;
+      -webkit-app-region: no-drag;
+      user-select: text;
+    }
+    .notes-area:focus {
+      border-color: var(--accent);
+    }
+    .notes-area::placeholder {
+      color: var(--text-muted);
+    }
+
+    .notes-saved {
+      font-size: 11px;
+      color: var(--green);
+      margin-top: 6px;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .notes-saved.show { opacity: 1; }
+
+    /* Process log (collapsible) */
+    #debug-wrapper {
+      margin-top: 16px;
+      display: none;
+    }
+    #debug-wrapper.active { display: block; }
+
+    #debug-wrapper summary {
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 4px 0;
+      user-select: none;
+      -webkit-app-region: no-drag;
+    }
+    #debug-wrapper summary:hover { color: var(--text-dim); }
+
+    #process-log {
+      background: var(--bg-sidebar);
+      border-radius: var(--radius);
+      padding: 12px;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text-dim);
+      max-height: 200px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      margin-top: 6px;
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+  </style>
+</head>
+<body>
+
+  <div id="sidebar">
+    <div id="sidebar-header">
+      <h1>Meetings</h1>
+    </div>
+    <div id="rec-controls">
+      <button class="btn btn-record" id="btn-rec" onclick="toggleRecording()">Record</button>
+    </div>
+    <div id="rec-status-bar">
+      <span class="dot"></span>
+      <span id="rec-time">00:00</span>
+      <span id="rec-session"></span>
+    </div>
+    <div id="session-list"></div>
+  </div>
+
+  <div id="main">
+    <div id="main-header">
+      <h2 id="detail-title" onclick="startRename()">Select a session</h2>
+      <button class="btn-sm" id="btn-transcribe" onclick="transcribeSelected()" style="display:none">Transcribe</button>
+      <button class="btn-sm" id="btn-process" onclick="processSelected()" style="display:none">Process</button>
+    </div>
+    <div id="content">
+      <div id="empty-state">
+        <div class="icon">🎙</div>
+        <p>Record a meeting to get started</p>
+      </div>
+      <div id="session-detail" style="display:none"></div>
+      <div id="debug-wrapper">
+        <details>
+          <summary>Debug Log</summary>
+          <div id="process-log"></div>
+        </details>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let sessions = [];
+    let selectedId = null;
+    let isRecording = false;
+    let currentRecSessionId = null;
+    let notesSaveTimer = null;
+
+    // ─── Init ───
+    async function init() {
+      const status = await window.api.getRecStatus();
+      if (status.recording) {
+        isRecording = true;
+        currentRecSessionId = status.sessionId;
+        updateRecUI(true);
+        showRecordingNotes(status.sessionId);
+      }
+      await refreshSessions();
+    }
+
+    // ─── Sessions ───
+    async function refreshSessions() {
+      sessions = await window.api.getSessions();
+      renderSessionList();
+    }
+
+    function renderSessionList() {
+      const list = document.getElementById('session-list');
+      list.innerHTML = sessions.map(s => {
+        let badgeClass, badgeText;
+        if (processingSessionId === s.id) {
+          badgeClass = 'badge-processing';
+          badgeText = 'PROCESSING';
+        } else {
+          badgeClass = { recorded: 'badge-rec', transcribed: 'badge-stt', done: 'badge-done' }[s.status];
+          badgeText = { recorded: 'REC', transcribed: 'STT', done: 'DONE' }[s.status];
+        }
+        const title = s.title || formatSessionId(s.id);
+        const selected = s.id === selectedId ? 'selected' : '';
+
+        const dur = s.duration ? ` - ${Math.round(s.duration/60)}m` : '';
+        return `<div class="session-item ${selected}" onclick="selectSession('${s.id}')">
+          <div class="session-title">${escapeHtml(title)}</div>
+          <div class="session-meta">
+            <span>${formatDate(s.id)}${dur}</span>
+            <span class="badge ${badgeClass}">${badgeText}</span>
+          </div>
+        </div>`;
+      }).join('');
+    }
+
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    function renderMarkdown(md) {
+      // Simple markdown renderer for enriched notes
+      // Handles: ## headers, **bold** lines (user notes), regular text (AI context)
+      const lines = md.split('\n');
+      let html = '';
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) {
+          continue;
+        } else if (trimmed.startsWith('## ')) {
+          html += `<h2>${escapeHtml(trimmed.slice(3))}</h2>`;
+        } else if (trimmed.startsWith('**') && trimmed.includes('**', 2)) {
+          // Bold line = user's personal note
+          const text = trimmed.replace(/\*\*/g, '');
+          html += `<div class="user-note">${escapeHtml(text)}</div>`;
+        } else if (trimmed.startsWith('- ')) {
+          html += `<div class="ai-context">&bull; ${escapeHtml(trimmed.slice(2))}</div>`;
+        } else {
+          html += `<div class="ai-context">${escapeHtml(trimmed)}</div>`;
+        }
+      }
+      return html;
+    }
+
+    function formatSessionId(id) {
+      return id.replace(/_/g, ' ');
+    }
+
+    function formatDate(id) {
+      const parts = id.match(/(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})/);
+      if (!parts) return id;
+      return `${parts[3]}.${parts[2]} ${parts[4]}:${parts[5]}`;
+    }
+
+    // ─── Rename ───
+    function startRename() {
+      if (!selectedId && !currentRecSessionId) return;
+
+      const h2 = document.getElementById('detail-title');
+      const currentText = h2.textContent;
+
+      h2.contentEditable = true;
+      h2.classList.add('editing');
+      h2.focus();
+
+      // Select all text
+      const range = document.createRange();
+      range.selectNodeContents(h2);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+
+      const finishRename = async () => {
+        h2.contentEditable = false;
+        h2.classList.remove('editing');
+        const newTitle = h2.textContent.trim();
+        if (newTitle && newTitle !== currentText) {
+          const sessionId = selectedId || currentRecSessionId;
+          if (sessionId) {
+            await window.api.renameSession(sessionId, newTitle);
+            await refreshSessions();
+          }
+        }
+      };
+
+      h2.onblur = finishRename;
+      h2.onkeydown = (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          h2.blur();
+        }
+        if (e.key === 'Escape') {
+          h2.textContent = currentText;
+          h2.blur();
+        }
+      };
+    }
+
+    // ─── Detail ───
+    function formatDuration(seconds) {
+      if (!seconds) return '';
+      const m = Math.floor(seconds / 60);
+      const s = Math.round(seconds % 60);
+      if (m >= 60) {
+        const h = Math.floor(m / 60);
+        const rm = m % 60;
+        return `${h}h ${rm}m`;
+      }
+      return `${m}m ${s}s`;
+    }
+
+    function formatFullDate(id) {
+      const parts = id.match(/(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})/);
+      if (!parts) return id;
+      const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      return `${months[parseInt(parts[2])-1]} ${parseInt(parts[3])}, ${parts[1]} at ${parts[4]}:${parts[5]}`;
+    }
+
+    async function selectSession(id) {
+      selectedId = id;
+      renderSessionList();
+
+      const detail = await window.api.getSessionDetail(id);
+      const session = sessions.find(s => s.id === id);
+
+      document.getElementById('empty-state').style.display = 'none';
+      document.getElementById('session-detail').style.display = 'block';
+
+      const title = detail.meta?.title || detail.notes?.title || formatSessionId(id);
+      document.getElementById('detail-title').textContent = title;
+
+      // Show buttons based on status
+      document.getElementById('btn-transcribe').style.display = !session.hasTranscript ? 'inline-block' : 'none';
+      document.getElementById('btn-process').style.display = !session.hasNotes ? 'inline-block' : 'none';
+
+      let html = '';
+
+      // Metadata bar
+      const metaParts = [];
+      metaParts.push(`<span class="meta-item"><span class="meta-icon">&#128197;</span> ${formatFullDate(id)}</span>`);
+      if (session.duration) {
+        metaParts.push(`<span class="meta-item"><span class="meta-icon">&#9202;</span> ${formatDuration(session.duration)}</span>`);
+      }
+      if (session.participants?.length) {
+        const chips = session.participants.map((p, i) =>
+          `<span class="participant-chip" onclick="editParticipant(event, ${i})" data-idx="${i}">${escapeHtml(p)}</span>`
+        ).join(' ');
+        metaParts.push(`<span class="meta-item"><span class="meta-icon">&#128101;</span> ${chips}</span>`);
+      }
+      if (detail.notes?.transcript_stats?.segments) {
+        metaParts.push(`<span class="meta-item"><span class="meta-label">Segments</span> ${detail.notes.transcript_stats.segments}</span>`);
+      }
+      html += `<div class="meta-bar">${metaParts.join('')}</div>`;
+
+      // AI Notes first (primary content)
+      if (detail.notes) {
+        // Enriched Notes (Granola-style: user notes in bold, AI context around them)
+        if (detail.notes.enriched_notes) {
+          html += '<div class="detail-section"><h3>Meeting Notes</h3>';
+          html += '<div class="notes-content enriched-notes" id="enriched-notes-area" onclick="enableNotesEditing()">';
+          html += renderMarkdown(detail.notes.enriched_notes);
+          html += '</div>';
+          html += '<div class="edit-hint" id="edit-hint">Click to edit - changes auto-save</div>';
+          html += '</div>';
+        }
+
+        if (detail.notes.summary) {
+          html += `<div class="detail-section"><h3>Summary</h3><div class="notes-content"><p>${escapeHtml(detail.notes.summary)}</p></div></div>`;
+        }
+
+        if (detail.notes.action_items?.length) {
+          html += '<div class="detail-section"><h3>Action Items</h3>';
+          detail.notes.action_items.forEach(item => {
+            html += `<div class="action-item">
+              <span class="owner">${escapeHtml(item.owner || '?')}</span>
+              <span class="task">${escapeHtml(item.task || '')}</span>
+              ${item.deadline ? `<div class="deadline">Due: ${escapeHtml(item.deadline)}</div>` : ''}
+            </div>`;
+          });
+          html += '</div>';
+        }
+
+        if (detail.notes.decisions?.length) {
+          html += '<div class="detail-section"><h3>Decisions</h3><div class="notes-content"><ul>';
+          detail.notes.decisions.forEach(d => { html += `<li>${escapeHtml(d)}</li>`; });
+          html += '</ul></div></div>';
+        }
+      }
+
+      // Personal notes (collapsible if notes exist, prominent if no notes yet)
+      if (detail.notes) {
+        html += `<div class="detail-section">
+          <details>
+            <summary style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;cursor:pointer;user-select:none;margin-bottom:8px;">Personal Notes</summary>
+            <textarea class="notes-area" id="personal-notes-area"
+              placeholder="Your meeting notes..." oninput="autoSaveNotes()" style="min-height:120px;">${escapeHtml(detail.personalNotes || '')}</textarea>
+            <div class="notes-saved" id="notes-saved-indicator">Saved</div>
+          </details>
+        </div>`;
+      } else {
+        html += `<div class="detail-section">
+          <h3>Personal Notes</h3>
+          <textarea class="notes-area" id="personal-notes-area"
+            placeholder="Your meeting notes..." oninput="autoSaveNotes()">${escapeHtml(detail.personalNotes || '')}</textarea>
+          <div class="notes-saved" id="notes-saved-indicator">Saved</div>
+        </div>`;
+      }
+
+      // Transcript
+      if (detail.transcript) {
+        const nameMap = detail.meta?.participant_names || {};
+        html += '<div class="detail-section"><h3>Transcript</h3>';
+        const lines = detail.transcript.split('\n').filter(l => l.trim());
+        lines.forEach(line => {
+          const match = line.match(/\*\*(\w+)\*\*\s*(\[[\d.]+s\])?\s*:?\s*(.*)/);
+          if (match) {
+            const [_, rawSpeaker, ts, text] = match;
+            const speaker = nameMap[rawSpeaker] || rawSpeaker;
+            const cls = rawSpeaker === 'Them' ? 'them' : '';
+            html += `<div class="transcript-line">
+              <span class="speaker ${cls}">${escapeHtml(speaker)}</span>
+              ${ts ? `<span class="timestamp">${escapeHtml(ts)}</span>` : ''}
+              ${escapeHtml(text)}
+            </div>`;
+          } else if (!line.startsWith('#') && !line.startsWith('-') && !line.startsWith('---')) {
+            html += `<div class="transcript-line">${escapeHtml(line)}</div>`;
+          }
+        });
+        html += '</div>';
+      }
+
+      if (!detail.transcript && !detail.notes && !detail.personalNotes) {
+        html += `<div class="detail-section">
+          <p style="color: var(--text-muted)">Recording available. Click <strong>Transcribe</strong> or <strong>Process</strong> to generate transcript and notes.</p>
+        </div>`;
+      }
+
+      document.getElementById('session-detail').innerHTML = html;
+    }
+
+    // ─── Inline Notes Editing ───
+    let notesEditTimer = null;
+    function enableNotesEditing() {
+      const el = document.getElementById('enriched-notes-area');
+      if (!el || el.contentEditable === 'true') return;
+      el.contentEditable = true;
+      el.focus();
+      const hint = document.getElementById('edit-hint');
+      if (hint) { hint.classList.add('show'); setTimeout(() => hint.classList.remove('show'), 2000); }
+
+      el.oninput = () => {
+        clearTimeout(notesEditTimer);
+        notesEditTimer = setTimeout(() => saveEnrichedNotes(), 1000);
+      };
+      el.onblur = () => {
+        setTimeout(() => {
+          if (document.activeElement !== el) {
+            el.contentEditable = false;
+          }
+        }, 200);
+      };
+    }
+
+    async function saveEnrichedNotes() {
+      if (!selectedId) return;
+      const el = document.getElementById('enriched-notes-area');
+      if (!el) return;
+      // Extract text content back to markdown-ish format
+      const html = el.innerHTML;
+      // We save the raw innerHTML - the backend can store it
+      await window.api.saveEnrichedNotes(selectedId, el.innerText);
+      const hint = document.getElementById('edit-hint');
+      if (hint) {
+        hint.textContent = 'Saved';
+        hint.classList.add('show');
+        setTimeout(() => { hint.classList.remove('show'); hint.textContent = 'Click to edit - changes auto-save'; }, 1500);
+      }
+    }
+
+    // ─── Participant Editing ───
+    function editParticipant(event, idx) {
+      event.stopPropagation();
+      const chip = event.target;
+      if (chip.contentEditable === 'true') return;
+
+      const original = chip.textContent;
+      chip.contentEditable = true;
+      chip.classList.add('editing');
+      chip.focus();
+
+      // Select all
+      const range = document.createRange();
+      range.selectNodeContents(chip);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+
+      const finish = async () => {
+        chip.contentEditable = false;
+        chip.classList.remove('editing');
+        const newName = chip.textContent.trim();
+        if (newName && newName !== original && selectedId) {
+          await window.api.renameParticipant(selectedId, idx, original, newName);
+          // Refresh to update transcript with new name
+          await refreshSessions();
+          selectSession(selectedId);
+        }
+      };
+
+      chip.onblur = finish;
+      chip.onkeydown = (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); chip.blur(); }
+        if (e.key === 'Escape') { chip.textContent = original; chip.blur(); }
+      };
+    }
+
+    // ─── Recording Notes ───
+    function showRecordingNotes(sessionId) {
+      document.getElementById('empty-state').style.display = 'none';
+      document.getElementById('session-detail').style.display = 'block';
+
+      document.getElementById('detail-title').textContent = 'New Recording';
+      document.getElementById('btn-transcribe').style.display = 'none';
+      document.getElementById('btn-process').style.display = 'none';
+
+      document.getElementById('session-detail').innerHTML = `
+        <div class="detail-section">
+          <h3>Meeting Notes</h3>
+          <textarea class="notes-area" id="personal-notes-area"
+            placeholder="Type your meeting notes here..."
+            oninput="autoSaveRecordingNotes()" style="min-height: 400px;"></textarea>
+          <div class="notes-saved" id="notes-saved-indicator">Saved</div>
+        </div>
+      `;
+
+      // Focus textarea
+      setTimeout(() => {
+        const ta = document.getElementById('personal-notes-area');
+        if (ta) ta.focus();
+      }, 100);
+    }
+
+    function autoSaveRecordingNotes() {
+      if (!currentRecSessionId) return;
+      clearTimeout(notesSaveTimer);
+      notesSaveTimer = setTimeout(async () => {
+        const ta = document.getElementById('personal-notes-area');
+        if (!ta) return;
+        await window.api.savePersonalNotes(currentRecSessionId, ta.value);
+        const indicator = document.getElementById('notes-saved-indicator');
+        if (indicator) {
+          indicator.classList.add('show');
+          setTimeout(() => indicator.classList.remove('show'), 1500);
+        }
+      }, 500);
+    }
+
+    function autoSaveNotes() {
+      if (!selectedId) return;
+      clearTimeout(notesSaveTimer);
+      notesSaveTimer = setTimeout(async () => {
+        const ta = document.getElementById('personal-notes-area');
+        if (!ta) return;
+        await window.api.savePersonalNotes(selectedId, ta.value);
+        const indicator = document.getElementById('notes-saved-indicator');
+        if (indicator) {
+          indicator.classList.add('show');
+          setTimeout(() => indicator.classList.remove('show'), 1500);
+        }
+      }, 500);
+    }
+
+    // ─── Recording ───
+    async function toggleRecording() {
+      if (!isRecording) {
+        const sessionId = await window.api.startRecording();
+        isRecording = true;
+        currentRecSessionId = sessionId;
+        updateRecUI(true);
+        showRecordingNotes(sessionId);
+      } else {
+        const savedId = await window.api.stopRecording();
+        isRecording = false;
+        currentRecSessionId = null;
+        updateRecUI(false);
+        await refreshSessions();
+        if (savedId) {
+          selectSession(savedId);
+        }
+      }
+    }
+
+    function updateRecUI(rec) {
+      const btn = document.getElementById('btn-rec');
+      const bar = document.getElementById('rec-status-bar');
+
+      if (rec) {
+        btn.textContent = 'Stop';
+        btn.classList.add('recording');
+        bar.classList.add('active');
+      } else {
+        btn.textContent = 'Record';
+        btn.classList.remove('recording');
+        bar.classList.remove('active');
+      }
+    }
+
+    // ─── Processing ───
+    async function processSelected() {
+      if (!selectedId) return;
+      const btn = document.getElementById('btn-process');
+      const log = document.getElementById('process-log');
+      btn.classList.add('processing');
+      btn.textContent = 'Processing...';
+      document.getElementById('debug-wrapper').classList.add('active');
+      log.textContent = 'Starting transcription + notes...\n';
+
+      const result = await window.api.processSession(selectedId);
+
+      btn.classList.remove('processing');
+      if (result.success) {
+        btn.textContent = 'Done!';
+        btn.style.color = 'var(--green)';
+        btn.style.borderColor = 'var(--green)';
+        log.textContent += '\nDone!\n';
+        await refreshSessions();
+        selectSession(selectedId);
+      } else {
+        btn.textContent = 'Error';
+        btn.style.color = 'var(--red)';
+        log.textContent += `\nError: ${result.error}\n`;
+      }
+    }
+
+    async function transcribeSelected() {
+      if (!selectedId) return;
+      const btn = document.getElementById('btn-transcribe');
+      const log = document.getElementById('process-log');
+      btn.classList.add('processing');
+      btn.textContent = 'Transcribing...';
+      document.getElementById('debug-wrapper').classList.add('active');
+      log.textContent = 'Starting transcription...\n';
+
+      const result = await window.api.transcribeSession(selectedId);
+
+      btn.classList.remove('processing');
+      if (result.success) {
+        btn.textContent = 'Done!';
+        btn.style.color = 'var(--green)';
+        log.textContent += '\nDone!\n';
+        await refreshSessions();
+        selectSession(selectedId);
+      } else {
+        btn.textContent = 'Error';
+        btn.style.color = 'var(--red)';
+        log.textContent += `\nError: ${result.error}\n`;
+      }
+    }
+
+    // ─── IPC listeners ───
+    window.api.onRecStatus((data) => {
+      if (data.recording) {
+        document.getElementById('rec-time').textContent = data.time;
+        document.getElementById('rec-session').textContent = data.sessionId;
+      } else {
+        updateRecUI(false);
+      }
+    });
+
+    window.api.onSessionSaved(async (id) => {
+      await refreshSessions();
+    });
+
+    window.api.onProcessLog((msg) => {
+      const log = document.getElementById('process-log');
+      log.textContent += msg;
+      log.scrollTop = log.scrollHeight;
+    });
+
+    window.api.onAutoProcessStatus(async (data) => {
+      if (data.stage === 'transcribing') {
+        // Show processing indicator in sidebar
+        processingSessionId = data.sessionId;
+        renderSessionList();
+        // Show log
+        const log = document.getElementById('process-log');
+        document.getElementById('debug-wrapper').classList.add('active');
+        log.textContent = 'Auto-processing: transcribing + generating notes...\n';
+      } else if (data.stage === 'done') {
+        processingSessionId = null;
+        await refreshSessions();
+        if (selectedId === data.sessionId || !selectedId) {
+          selectSession(data.sessionId);
+        }
+      } else if (data.stage === 'error') {
+        processingSessionId = null;
+        renderSessionList();
+        const log = document.getElementById('process-log');
+        document.getElementById('debug-wrapper').classList.add('active');
+        log.textContent += `\nError: ${data.error}\n`;
+      }
+    });
+
+    // ─── Start ───
+    let processingSessionId = null;
+    init();
+  </script>
+</body>
+</html>
