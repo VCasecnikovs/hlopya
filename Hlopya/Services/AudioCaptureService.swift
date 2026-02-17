@@ -8,6 +8,7 @@ import ScreenCaptureKit
 final class AudioCaptureService: ObservableObject {
     @Published private(set) var isRecording = false
     @Published private(set) var elapsedTime: TimeInterval = 0
+    @Published var lastError: String?
 
     private var systemCapture: SystemAudioCapture?
     private var micRecorder: MicRecorder?
@@ -16,11 +17,40 @@ final class AudioCaptureService: ObservableObject {
 
     let sampleRate = 16000
 
+    /// Check if screen recording permission is granted
+    var hasScreenRecordingPermission: Bool {
+        CGPreflightScreenCaptureAccess()
+    }
+
+    /// Request screen recording permission (opens System Settings)
+    func requestScreenRecordingPermission() {
+        CGRequestScreenCaptureAccess()
+    }
+
     func startRecording(sessionDir: URL) async throws {
+        lastError = nil
+
+        // Check screen recording permission
+        if !CGPreflightScreenCaptureAccess() {
+            CGRequestScreenCaptureAccess()
+            throw AudioCaptureError.permissionDenied
+        }
+
+        // Check microphone permission
+        switch AVCaptureDevice.authorizationStatus(for: .audio) {
+        case .authorized:
+            break
+        case .notDetermined:
+            let granted = await AVCaptureDevice.requestAccess(for: .audio)
+            if !granted { throw AudioCaptureError.micPermissionDenied }
+        default:
+            throw AudioCaptureError.micPermissionDenied
+        }
+
         let sysPath = sessionDir.appendingPathComponent("system.wav").path
         let micPath = sessionDir.appendingPathComponent("mic.wav").path
 
-        // System audio via ScreenCaptureKit
+        // System audio via ScreenCaptureKit (audio-only, no screen content)
         let sysWriter = try WAVWriter(path: sysPath, sampleRate: sampleRate)
         systemCapture = SystemAudioCapture(writer: sysWriter, targetRate: sampleRate)
         try await systemCapture!.start()
@@ -199,11 +229,13 @@ final class MicRecorder {
 enum AudioCaptureError: LocalizedError {
     case noDisplays
     case permissionDenied
+    case micPermissionDenied
 
     var errorDescription: String? {
         switch self {
         case .noDisplays: return "No displays found for audio capture"
-        case .permissionDenied: return "Screen Recording permission is required"
+        case .permissionDenied: return "Screen Recording permission required. Go to System Settings > Privacy & Security > Screen Recording and enable Hlopya."
+        case .micPermissionDenied: return "Microphone permission required. Go to System Settings > Privacy & Security > Microphone and enable Hlopya."
         }
     }
 }

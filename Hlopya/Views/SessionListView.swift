@@ -51,6 +51,27 @@ struct SessionListView: View {
                 .padding(.bottom, 8)
             }
 
+            // Permission error
+            if let error = vm.audioCapture.lastError {
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                        .font(.caption)
+                    Text(error)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(3)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(Color.orange.opacity(0.1))
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .padding(.horizontal, 12)
+                .onTapGesture {
+                    vm.audioCapture.lastError = nil
+                }
+            }
+
             Divider()
 
             // Session list

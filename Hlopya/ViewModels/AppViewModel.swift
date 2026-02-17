@@ -42,7 +42,12 @@ final class AppViewModel {
             try await audioCapture.startRecording(sessionDir: session.directoryURL)
             selectedSessionId = session.id
         } catch {
+            audioCapture.lastError = error.localizedDescription
             print("[App] Recording failed: \(error)")
+            // Clean up failed session
+            if let session = sessionManager.sessions.first {
+                try? sessionManager.deleteSession(session.id)
+            }
         }
     }
 
