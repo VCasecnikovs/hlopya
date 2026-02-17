@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Export meeting recorder sessions as JSON to stdout.
+Hlopya - Export sessions as JSON to stdout.
 Designed for integration with external tools and data pipelines.
 
 Usage:
@@ -183,7 +183,7 @@ def list_sessions(config: dict, status_filter: str | None = None, since: str | N
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Export meeting recorder sessions as JSON"
+        description="Export Hlopya sessions as JSON"
     )
     parser.add_argument("session_dir", nargs="?", help="Path to session directory")
     parser.add_argument("--latest", action="store_true", help="Export the latest session")

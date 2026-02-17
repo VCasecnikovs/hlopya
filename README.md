@@ -1,4 +1,4 @@
-# Meeting Recorder
+# Hlopya
 
 macOS app that records meetings, transcribes with AI (NVIDIA Parakeet / Whisper), and generates structured notes with Claude.
 
@@ -22,8 +22,8 @@ macOS app that records meetings, transcribes with AI (NVIDIA Parakeet / Whisper)
 ## Install
 
 ```bash
-git clone https://github.com/VCasecnikovs/meeting-recorder.git
-cd meeting-recorder
+git clone https://github.com/VCasecnikovs/hlopya.git
+cd hlopya
 bash install.sh
 ```
 
@@ -39,14 +39,14 @@ If you prefer step-by-step:
 cd audiocap && bash build.sh && cd ..      # Build audio capture binary
 pip install -r requirements.txt             # Python deps (includes large STT models)
 cd gui && npm install && npm run build      # Build Electron app
-cp -R gui/dist/mac-arm64/Meeting\ Recorder.app /Applications/
+cp -R gui/dist/mac-arm64/Hlopya.app /Applications/
 ```
 
 ## Usage
 
 ### GUI (Electron app)
 
-Launch from `/Applications/Meeting Recorder.app` or Spotlight.
+Launch from `/Applications/Hlopya.app` or Spotlight.
 
 - Click **Record** to start - a floating red indicator shows recording time
 - Take notes in the text area during the meeting
@@ -83,7 +83,7 @@ cd gui && npm start
 ## Architecture
 
 ```
-meeting-recorder/
+hlopya/
 ├── gui/                    # Electron app
 │   ├── main.js             # Main process (tray, recording, IPC)
 │   ├── index.html          # UI (sidebar + detail view)

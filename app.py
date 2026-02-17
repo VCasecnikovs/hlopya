@@ -1,6 +1,6 @@
 """
-Meeting Recorder - Terminal UI App.
-Record meetings, auto-transcribe with Parakeet, generate notes with Claude.
+Hlopya - Terminal UI App.
+macOS app that records meetings, transcribes with AI, and generates structured notes.
 
 Usage:
   python app.py                  # Launch TUI app
@@ -198,7 +198,7 @@ RichLog {
 
 class MeetingApp(App):
     CSS = STYLES
-    TITLE = "Meeting Recorder"
+    TITLE = "Hlopya"
     BINDINGS = [
         Binding("r", "toggle_recording", "Record"),
         Binding("p", "process_selected", "Process"),
@@ -578,7 +578,7 @@ def run_cli():
     """CLI commands."""
     import argparse
 
-    parser = argparse.ArgumentParser(description="Meeting Recorder")
+    parser = argparse.ArgumentParser(description="Hlopya")
     sub = parser.add_subparsers(dest="command")
 
     sub.add_parser("record", help="Record a meeting (Ctrl+C to stop)")

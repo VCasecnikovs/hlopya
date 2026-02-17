@@ -1,4 +1,4 @@
-# Meeting Recorder Configuration
+# Hlopya Configuration
 
 audio:
   sample_rate: 16000        # Optimal for STT models

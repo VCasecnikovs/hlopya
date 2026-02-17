@@ -1,10 +1,10 @@
 #!/bin/bash
-# Meeting Recorder - Setup Script
+# Hlopya - Setup Script
 # Run: bash setup.sh
 
 set -e
 
-echo "=== Meeting Recorder Setup ==="
+echo "=== Hlopya Setup ==="
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 

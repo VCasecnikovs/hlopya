@@ -1,9 +1,9 @@
 #!/bin/bash
-# Meeting Recorder - One-step install
+# Hlopya - One-step install
 # Usage: bash install.sh
 set -e
 
-echo "=== Meeting Recorder Install ==="
+echo "=== Hlopya Install ==="
 echo ""
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -34,11 +34,11 @@ npm run build
 # 4. Install to Applications
 echo ""
 echo "Step 4/4: Installing to /Applications..."
-if [ -d "/Applications/Meeting Recorder.app" ]; then
+if [ -d "/Applications/Hlopya.app" ]; then
     echo "  Removing old version..."
-    rm -rf "/Applications/Meeting Recorder.app"
+    rm -rf "/Applications/Hlopya.app"
 fi
-cp -R "$SCRIPT_DIR/gui/dist/mac-arm64/Meeting Recorder.app" /Applications/
+cp -R "$SCRIPT_DIR/gui/dist/mac-arm64/Hlopya.app" /Applications/
 echo "  Installed!"
 
 # Create recordings dir
@@ -47,8 +47,8 @@ mkdir -p ~/recordings
 echo ""
 echo "=== Install complete! ==="
 echo ""
-echo "Launch: open '/Applications/Meeting Recorder.app'"
-echo "   or: search 'Meeting Recorder' in Spotlight"
+echo "Launch: open '/Applications/Hlopya.app'"
+echo "   or: search 'Hlopya' in Spotlight"
 echo ""
 echo "First run: macOS will ask for Screen & System Audio Recording permission."
 echo "Grant it in System Settings > Privacy & Security."

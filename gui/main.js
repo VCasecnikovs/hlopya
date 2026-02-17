@@ -159,11 +159,11 @@ function createTray() {
   icon.setTemplateImage(true);
 
   tray = new Tray(icon.resize({ width: 18, height: 18 }));
-  tray.setToolTip('Meeting Recorder');
+  tray.setToolTip('Hlopya');
 
   const contextMenu = Menu.buildFromTemplate([
     {
-      label: 'Open Meeting Recorder',
+      label: 'Open Hlopya',
       click: () => {
         if (mainWindow) mainWindow.show();
         else createMainWindow();

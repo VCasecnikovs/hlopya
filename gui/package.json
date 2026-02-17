@@ -1,7 +1,7 @@
 {
-  "name": "meeting-recorder",
+  "name": "hlopya",
   "version": "1.0.0",
-  "description": "Meeting recorder with AI transcription and notes",
+  "description": "macOS app that records meetings, transcribes with AI, and generates structured notes",
   "author": "VCasecnikovs",
   "license": "UNLICENSED",
   "main": "main.js",
@@ -16,8 +16,8 @@
     "electron-builder": "^25.1.8"
   },
   "build": {
-    "appId": "com.meeting-recorder.app",
-    "productName": "Meeting Recorder",
+    "appId": "com.hlopya.app",
+    "productName": "Hlopya",
     "mac": {
       "category": "public.app-category.productivity",
       "target": "dir",
