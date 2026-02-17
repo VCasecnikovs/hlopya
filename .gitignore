@@ -10,4 +10,6 @@ __pycache__/
 *.wav
 *.egg-info/
 dist/
-build/
+# Keep gui/build/icon.icns but ignore build artifacts
+gui/build/icon.iconset/
+gui/build/create-icon.py
