@@ -8,6 +8,30 @@ echo ""
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
+# Pre-flight checks
+fail=0
+
+if ! command -v python3 &>/dev/null; then
+    echo "ERROR: python3 not found. Install Python 3.11+ from python.org or: brew install python"
+    fail=1
+fi
+
+if ! command -v npm &>/dev/null; then
+    echo "ERROR: npm not found. Install Node.js from nodejs.org or: brew install node"
+    fail=1
+fi
+
+if ! xcode-select -p &>/dev/null; then
+    echo "ERROR: Xcode Command Line Tools not found. Install: xcode-select --install"
+    fail=1
+fi
+
+if [ "$fail" -eq 1 ]; then
+    echo ""
+    echo "Fix the above and re-run: bash install.sh"
+    exit 1
+fi
+
 # 1. Build audiocap
 echo "Step 1/4: Building audiocap (system audio capture)..."
 if [ -f "$SCRIPT_DIR/audiocap/AudioCap.app/Contents/MacOS/audiocap" ]; then
@@ -16,13 +40,13 @@ else
     cd "$SCRIPT_DIR/audiocap" && bash build.sh
 fi
 
-# 2. Python deps
+# 2. Python deps (core only - lightweight)
 echo ""
 echo "Step 2/4: Installing Python dependencies..."
-pip3 install -q sounddevice soundfile numpy pyyaml 2>/dev/null || pip3 install sounddevice soundfile numpy pyyaml
+pip3 install --break-system-packages -q sounddevice soundfile numpy pyyaml 2>/dev/null \
+    || pip3 install -q sounddevice soundfile numpy pyyaml 2>/dev/null \
+    || pip3 install sounddevice soundfile numpy pyyaml
 echo "  Core deps installed"
-echo "  Note: STT models (torch, nemo, faster-whisper) are large (~2GB)."
-echo "  Install them separately: pip3 install -r requirements.txt"
 
 # 3. Electron build
 echo ""

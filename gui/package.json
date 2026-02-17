@@ -51,6 +51,10 @@
       {
         "from": "../config.yaml",
         "to": "python/config.yaml"
+      },
+      {
+        "from": "../export.py",
+        "to": "python/export.py"
       }
     ],
     "files": [
