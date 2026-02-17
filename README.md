@@ -22,24 +22,25 @@ macOS app that records meetings, transcribes with AI (NVIDIA Parakeet / Whisper)
 ## Install
 
 ```bash
-# Clone
 git clone https://github.com/VCasecnikovs/meeting-recorder.git
 cd meeting-recorder
-
-# Build audiocap (system audio capture binary)
-cd audiocap && bash build.sh && cd ..
-
-# Install Python dependencies
-pip install -r requirements.txt
-
-# Install Electron dependencies + build .app
-cd gui && npm install && npm run build && cd ..
-
-# Copy to Applications
-cp -R gui/dist/mac-arm64/Meeting\ Recorder.app /Applications/
+bash install.sh
 ```
 
+That's it. The script builds audiocap, installs deps, builds the Electron app, and copies it to `/Applications`.
+
 On first run, macOS will ask for **Screen & System Audio Recording** permission. Grant it in System Settings > Privacy & Security.
+
+### Manual install
+
+If you prefer step-by-step:
+
+```bash
+cd audiocap && bash build.sh && cd ..      # Build audio capture binary
+pip install -r requirements.txt             # Python deps (includes large STT models)
+cd gui && npm install && npm run build      # Build Electron app
+cp -R gui/dist/mac-arm64/Meeting\ Recorder.app /Applications/
+```
 
 ## Usage
 
