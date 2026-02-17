@@ -19,6 +19,9 @@ final class AppViewModel {
     var showSettings = false
     var pendingParticipant: String = ""
 
+    // Nub panel
+    private var nubPanel: RecordingNubPanel?
+
     // Detail data (loaded on selection)
     var detailTranscript: String?
     var detailNotes: MeetingNotes?
@@ -46,6 +49,7 @@ final class AppViewModel {
             try await audioCapture.startRecording(sessionDir: session.directoryURL)
             selectedSessionId = session.id
             NSLog("[Hlopya] Recording started OK")
+            showNub()
         } catch {
             let msg = error.localizedDescription
             NSLog("[Hlopya] Recording FAILED: %@", msg)
@@ -58,6 +62,7 @@ final class AppViewModel {
     }
 
     func stopRecording() async {
+        hideNub()
         let sessionId = selectedSessionId
         await audioCapture.stopRecording()
         sessionManager.loadSessions()
@@ -226,5 +231,19 @@ final class AppViewModel {
         guard let id = selectedSessionId else { return }
         sessionManager.renameParticipant(sessionId: id, oldName: oldName, newName: newName)
         loadSessionDetail(id)
+    }
+
+    // MARK: - Nub Panel
+
+    private func showNub() {
+        if nubPanel == nil {
+            nubPanel = RecordingNubPanel(viewModel: self)
+        }
+        nubPanel?.orderFront(nil)
+    }
+
+    private func hideNub() {
+        nubPanel?.close()
+        nubPanel = nil
     }
 }

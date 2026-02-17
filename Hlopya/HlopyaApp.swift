@@ -3,7 +3,6 @@ import SwiftUI
 @main
 struct HlopyaApp: App {
     @State private var viewModel = AppViewModel()
-    @State private var nubPanel: RecordingNubPanel?
 
     var body: some Scene {
         // Main window
@@ -11,13 +10,6 @@ struct HlopyaApp: App {
             ContentView()
                 .environment(viewModel)
                 .frame(minWidth: 700, minHeight: 500)
-                .onChange(of: viewModel.audioCapture.isRecording) { _, isRecording in
-                    if isRecording {
-                        showNub()
-                    } else {
-                        hideNub()
-                    }
-                }
         }
         .defaultSize(width: 900, height: 650)
 
@@ -38,7 +30,7 @@ struct HlopyaApp: App {
             Divider()
             Button("Show Window") {
                 NSApp.activate(ignoringOtherApps: true)
-                if let window = NSApp.windows.first(where: { $0.title == "Hlopya" || $0.isKeyWindow }) {
+                if let window = NSApp.windows.first(where: { !($0 is NSPanel) }) {
                     window.makeKeyAndOrderFront(nil)
                 }
             }
@@ -60,17 +52,5 @@ struct HlopyaApp: App {
             SettingsView()
                 .environment(viewModel)
         }
-    }
-
-    private func showNub() {
-        if nubPanel == nil {
-            nubPanel = RecordingNubPanel(viewModel: viewModel)
-        }
-        nubPanel?.orderFront(nil)
-    }
-
-    private func hideNub() {
-        nubPanel?.close()
-        nubPanel = nil
     }
 }
