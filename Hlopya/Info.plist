@@ -23,7 +23,7 @@
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Hlopya needs microphone access to record your side of the conversation.</string>
 	<key>NSScreenCaptureUsageDescription</key>
-	<string>Hlopya needs screen recording permission to capture system audio from your meetings.</string>
+	<string>Hlopya needs system audio access to record meeting participants.</string>
 	<key>LSUIElement</key>
 	<false/>
 </dict>

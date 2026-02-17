@@ -120,13 +120,16 @@ final class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
         config.sampleRate = targetRate
         config.channelCount = 1
 
-        // Minimal video (required by ScreenCaptureKit)
-        config.width = 2
-        config.height = 2
-        config.minimumFrameInterval = CMTime(value: 1, timescale: 1)
+        // Audio-only: no video capture. On macOS 15+ this makes the app
+        // appear under "System Audio Recording Only" instead of "Screen Recording"
+        config.width = 1
+        config.height = 1
+        config.minimumFrameInterval = CMTime(value: 1, timescale: CMTimeScale.max)
+        config.showsCursor = false
 
         let filter = SCContentFilter(display: display, excludingApplications: [], exceptingWindows: [])
         stream = SCStream(filter: filter, configuration: config, delegate: self)
+        // Only audio output - no video output added
         try stream!.addStreamOutput(self, type: .audio, sampleHandlerQueue: DispatchQueue(label: "hlopya.audio-queue"))
         try await stream!.startCapture()
     }
