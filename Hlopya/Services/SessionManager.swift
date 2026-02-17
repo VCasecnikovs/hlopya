@@ -188,6 +188,27 @@ final class SessionManager: ObservableObject {
         }
     }
 
+    // MARK: - Delete
+
+    func deleteSession(_ sessionId: String) throws {
+        let dir = recordingsDir.appendingPathComponent(sessionId)
+        try FileManager.default.removeItem(at: dir)
+        sessions.removeAll { $0.id == sessionId }
+    }
+
+    // MARK: - Participants
+
+    func setParticipant(sessionId: String, name: String) {
+        let dir = recordingsDir.appendingPathComponent(sessionId)
+        saveMeta(sessionDir: dir, updates: [
+            "participant_names": ["Them": name],
+            "meeting_with": name
+        ])
+        if let idx = sessions.firstIndex(where: { $0.id == sessionId }) {
+            sessions[idx].participantNames = ["Them": name]
+        }
+    }
+
     // MARK: - Metadata
 
     func renameSession(_ sessionId: String, title: String) {

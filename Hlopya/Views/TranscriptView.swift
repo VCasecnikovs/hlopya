@@ -5,13 +5,40 @@ import SwiftUI
 struct TranscriptView: View {
     let markdown: String
     let participantNames: [String: String]
+    @State private var showCopied = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
+            // Copy button
+            HStack {
+                Spacer()
+                Button {
+                    // Copy plain text version
+                    let plain = parsedLines.map { line in
+                        let speaker = line.displaySpeaker ?? ""
+                        let ts = line.timestamp ?? ""
+                        return "\(speaker) \(ts): \(line.text)"
+                    }.joined(separator: "\n")
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(plain, forType: .string)
+                    withAnimation { showCopied = true }
+                    Task {
+                        try? await Task.sleep(for: .seconds(1.5))
+                        withAnimation { showCopied = false }
+                    }
+                } label: {
+                    Label(showCopied ? "Copied!" : "Copy All", systemImage: showCopied ? "checkmark" : "doc.on.doc")
+                        .font(.caption)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+            }
+
             ForEach(parsedLines) { line in
                 TranscriptLineView(line: line)
             }
         }
+        .textSelection(.enabled)
     }
 
     private var parsedLines: [TranscriptLine] {

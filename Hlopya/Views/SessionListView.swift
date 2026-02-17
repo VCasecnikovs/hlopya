@@ -3,9 +3,29 @@ import SwiftUI
 /// Sidebar: record button + session list with status badges
 struct SessionListView: View {
     @Environment(AppViewModel.self) private var vm
+    @State private var sessionToDelete: Session?
+    @State private var meetingWith: String = ""
 
     var body: some View {
         VStack(spacing: 0) {
+            // Meeting participant input
+            if !vm.audioCapture.isRecording {
+                HStack(spacing: 6) {
+                    Image(systemName: "person.fill")
+                        .foregroundStyle(.secondary)
+                        .font(.caption)
+                    TextField("Meeting with...", text: $meetingWith)
+                        .textFieldStyle(.plain)
+                        .font(.caption)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(Color(nsColor: .controlBackgroundColor))
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .padding(.horizontal, 12)
+                .padding(.top, 8)
+            }
+
             // Record controls
             recordButton
                 .padding(.horizontal, 12)
@@ -21,6 +41,11 @@ struct SessionListView: View {
                     Text(vm.audioCapture.formattedTime)
                         .font(.caption)
                         .foregroundStyle(.red)
+                    if !meetingWith.isEmpty {
+                        Text("with \(meetingWith)")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 .padding(.horizontal, 16)
                 .padding(.bottom, 8)
@@ -35,16 +60,43 @@ struct SessionListView: View {
             )) { session in
                 SessionRow(session: session, isProcessing: vm.processingSessionId == session.id)
                     .tag(session.id)
+                    .contextMenu {
+                        Button("Delete", role: .destructive) {
+                            sessionToDelete = session
+                        }
+                    }
             }
             .listStyle(.sidebar)
         }
         .frame(minWidth: 240)
         .navigationTitle("Meetings")
+        .alert("Delete Recording?", isPresented: Binding(
+            get: { sessionToDelete != nil },
+            set: { if !$0 { sessionToDelete = nil } }
+        )) {
+            Button("Cancel", role: .cancel) { sessionToDelete = nil }
+            Button("Delete", role: .destructive) {
+                if let s = sessionToDelete {
+                    vm.deleteSession(s.id)
+                    sessionToDelete = nil
+                }
+            }
+        } message: {
+            Text("This will permanently delete the recording and all associated files.")
+        }
     }
 
     private var recordButton: some View {
         Button {
-            Task { await vm.toggleRecording() }
+            Task {
+                if !vm.audioCapture.isRecording && !meetingWith.isEmpty {
+                    vm.pendingParticipant = meetingWith
+                }
+                await vm.toggleRecording()
+                if !vm.audioCapture.isRecording {
+                    meetingWith = ""
+                }
+            }
         } label: {
             HStack {
                 Image(systemName: vm.audioCapture.isRecording ? "stop.fill" : "record.circle")

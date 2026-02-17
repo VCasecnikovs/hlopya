@@ -17,6 +17,7 @@ final class AppViewModel {
     var processingSessionId: String?
     var processLog: String = ""
     var showSettings = false
+    var pendingParticipant: String = ""
 
     // Detail data (loaded on selection)
     var detailTranscript: String?
@@ -33,6 +34,11 @@ final class AppViewModel {
     func startRecording() async {
         do {
             let session = try sessionManager.createSession()
+            // Save participant info if set
+            if !pendingParticipant.isEmpty {
+                sessionManager.setParticipant(sessionId: session.id, name: pendingParticipant)
+                pendingParticipant = ""
+            }
             try await audioCapture.startRecording(sessionDir: session.directoryURL)
             selectedSessionId = session.id
         } catch {
@@ -47,8 +53,10 @@ final class AppViewModel {
 
         if let id = sessionId {
             selectSession(id)
-            // Auto-process
-            await processSession(id)
+            // Auto-process if enabled
+            if UserDefaults.standard.object(forKey: "autoProcess") == nil || UserDefaults.standard.bool(forKey: "autoProcess") {
+                await processSession(id)
+            }
         }
     }
 
@@ -177,6 +185,23 @@ final class AppViewModel {
     func saveEnrichedNotes(_ text: String) {
         guard let id = selectedSessionId else { return }
         sessionManager.saveEnrichedNotes(sessionId: id, text: text)
+    }
+
+    // MARK: - Delete
+
+    func deleteSession(_ sessionId: String) {
+        do {
+            try sessionManager.deleteSession(sessionId)
+            if selectedSessionId == sessionId {
+                selectedSessionId = nil
+                detailTranscript = nil
+                detailNotes = nil
+                detailPersonalNotes = ""
+                detailMeta = nil
+            }
+        } catch {
+            print("[App] Delete failed: \(error)")
+        }
     }
 
     // MARK: - Metadata

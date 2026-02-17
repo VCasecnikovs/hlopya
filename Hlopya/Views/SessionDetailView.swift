@@ -10,6 +10,10 @@ struct SessionDetailView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
+                // Title - large and editable
+                titleView
+                    .padding(.bottom, 4)
+
                 metadataBar
                 actionButtons
 
@@ -36,11 +40,6 @@ struct SessionDetailView: View {
             }
             .padding(24)
         }
-        .toolbar {
-            ToolbarItem(placement: .principal) {
-                titleView
-            }
-        }
         .onChange(of: vm.selectedSessionId) { _, newId in
             if let id = newId, let session = vm.sessionManager.sessions.first(where: { $0.id == id }) {
                 titleText = session.displayTitle
@@ -63,11 +62,11 @@ struct SessionDetailView: View {
                     editingTitle = false
                 })
                 .textFieldStyle(.plain)
-                .font(.headline)
+                .font(.system(size: 22, weight: .bold))
                 .onExitCommand { editingTitle = false }
             } else {
                 Text(vm.selectedSession?.displayTitle ?? "")
-                    .font(.headline)
+                    .font(.system(size: 22, weight: .bold))
                     .onTapGesture { editingTitle = true }
             }
         }
@@ -149,6 +148,7 @@ struct SessionDetailView: View {
             Text(summary)
                 .font(.body)
                 .foregroundStyle(.primary)
+                .textSelection(.enabled)
         }
 
         if let items = notes.actionItems, !items.isEmpty {

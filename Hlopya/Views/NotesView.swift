@@ -9,6 +9,7 @@ struct NotesView: View {
     @State private var isEditing = false
     @State private var editText = ""
     @State private var showSaved = false
+    @State private var showCopied = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -32,23 +33,44 @@ struct NotesView: View {
 
     private var displayMode: some View {
         VStack(alignment: .leading, spacing: 0) {
+            // Action buttons
+            HStack {
+                Spacer()
+                Button {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(markdown, forType: .string)
+                    withAnimation { showCopied = true }
+                    Task {
+                        try? await Task.sleep(for: .seconds(1.5))
+                        withAnimation { showCopied = false }
+                    }
+                } label: {
+                    Label(showCopied ? "Copied!" : "Copy All", systemImage: showCopied ? "checkmark" : "doc.on.doc")
+                        .font(.caption)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+
+                Button {
+                    editText = markdown
+                    isEditing = true
+                } label: {
+                    Label("Edit", systemImage: "pencil")
+                        .font(.caption)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+            }
+            .padding(.bottom, 6)
+
             ForEach(parsedBlocks) { block in
                 blockView(block)
             }
         }
+        .textSelection(.enabled)
         .padding(12)
         .background(Color(nsColor: .controlBackgroundColor).opacity(0.5))
         .clipShape(RoundedRectangle(cornerRadius: 8))
-        .onTapGesture {
-            editText = markdown
-            isEditing = true
-        }
-        .overlay(alignment: .bottomTrailing) {
-            Text("Click to edit")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
-                .padding(8)
-        }
     }
 
     // MARK: - Edit Mode
