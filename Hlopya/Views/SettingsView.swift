@@ -25,29 +25,21 @@ struct SettingsView: View {
                 HStack {
                     Text("STT Model")
                     Spacer()
-                    Text("Parakeet v3 (CoreML)")
-                        .foregroundStyle(.secondary)
-                }
-
-                if vm.transcriptionService.isModelLoaded {
-                    HStack {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundStyle(HlopColors.statusDone)
-                        Text("Model loaded")
-                    }
-                } else {
-                    Button("Download Model (~400MB)") {
-                        Task {
-                            try? await vm.transcriptionService.loadModel()
+                    if vm.transcriptionService.isModelLoaded {
+                        HStack(spacing: HlopSpacing.xs) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(HlopColors.statusDone)
+                            Text("Parakeet v3 (CoreML)")
+                                .foregroundStyle(.secondary)
                         }
-                    }
-                    .disabled(vm.transcriptionService.isDownloading)
-
-                    if vm.transcriptionService.isDownloading {
-                        ProgressView()
-                            .controlSize(.small)
+                    } else {
+                        Text("Not downloaded")
+                            .foregroundStyle(.tertiary)
                     }
                 }
+                Text("Model can be downloaded from the sidebar")
+                    .font(HlopTypography.footnote)
+                    .foregroundStyle(.tertiary)
             }
 
             Section("Notes") {

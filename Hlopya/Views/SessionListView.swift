@@ -100,6 +100,44 @@ struct SessionListView: View {
                 .padding(.bottom, 8)
             }
 
+            // STT model download banner
+            if !vm.transcriptionService.isModelLoaded && !vm.audioCapture.isRecording {
+                HStack(spacing: HlopSpacing.sm) {
+                    Image(systemName: "waveform.badge.arrow.down")
+                        .font(.system(size: 13))
+                        .foregroundStyle(HlopColors.statusSTT)
+
+                    if vm.transcriptionService.isDownloading {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Downloading STT model...")
+                                .font(HlopTypography.footnote)
+                            ProgressView(value: vm.transcriptionService.downloadProgress)
+                                .tint(HlopColors.statusSTT)
+                        }
+                    } else {
+                        Text("STT model needed")
+                            .font(HlopTypography.footnote)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Download") {
+                            Task { try? await vm.transcriptionService.loadModel() }
+                        }
+                        .controlSize(.small)
+                    }
+                }
+                .padding(HlopSpacing.md)
+                .background {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(.ultraThinMaterial)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(HlopColors.statusSTT.opacity(0.15), lineWidth: 0.5)
+                        )
+                }
+                .padding(.horizontal, 14)
+                .padding(.bottom, 8)
+            }
+
             Divider()
 
             // Session list
