@@ -6,6 +6,7 @@ struct SessionListView: View {
     @Binding var showVocabulary: Bool
     @State private var sessionToDelete: Session?
     @State private var meetingWith: String = ""
+    @State private var showModelBanner = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -84,12 +85,13 @@ struct SessionListView: View {
                 .opacity(vm.audioCapture.isRecording ? 1 : 0)
             }
             .padding(14)
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(HlopColors.recordingPulse)
-                    .opacity(vm.audioCapture.isRecording ? 1 : 0)
-                    .animation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true), value: vm.audioCapture.isRecording)
-            )
+            .background {
+                if vm.audioCapture.isRecording {
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(HlopColors.recordingPulse)
+                        .modifier(RecordingPulseModifier())
+                }
+            }
 
             // Error banner
             if let error = vm.audioCapture.lastError {
@@ -101,8 +103,8 @@ struct SessionListView: View {
                 .padding(.bottom, 8)
             }
 
-            // STT model download banner
-            if !vm.transcriptionService.isModelLoaded && !vm.audioCapture.isRecording {
+            // STT model download banner (delayed to avoid flash when model loads quickly)
+            if showModelBanner && !vm.transcriptionService.isModelLoaded && !vm.audioCapture.isRecording {
                 HStack(spacing: HlopSpacing.sm) {
                     Image(systemName: "waveform.badge.arrow.down")
                         .font(.system(size: 13))
@@ -211,6 +213,11 @@ struct SessionListView: View {
             .listStyle(.sidebar)
         }
         .background(.ultraThinMaterial)
+        .task {
+            // Delay showing "Download STT" banner so it doesn't flash when model loads quickly
+            try? await Task.sleep(for: .seconds(3))
+            showModelBanner = true
+        }
         .alert("Delete Recording?", isPresented: Binding(
             get: { sessionToDelete != nil },
             set: { if !$0 { sessionToDelete = nil } }
@@ -313,5 +320,20 @@ struct PulseAnimation: ViewModifier {
             .opacity(isPulsing ? 0.3 : 1.0)
             .animation(.easeInOut(duration: 1.0).repeatForever(), value: isPulsing)
             .onAppear { isPulsing = true }
+    }
+}
+
+/// Recording background pulse - only exists in view tree while recording
+struct RecordingPulseModifier: ViewModifier {
+    @State private var pulse = false
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(pulse ? 0.4 : 1.0)
+            .onAppear {
+                withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
+                    pulse = true
+                }
+            }
     }
 }
