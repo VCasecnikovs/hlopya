@@ -1,9 +1,9 @@
-// swift-tools-version: 5.9
+// swift-tools-version: 6.0
 import PackageDescription
 
 let package = Package(
     name: "Hlopya",
-    platforms: [.macOS(.v14)],
+    platforms: [.macOS(.v15)],
     products: [
         .executable(name: "Hlopya", targets: ["Hlopya"]),
     ],
@@ -16,7 +16,8 @@ let package = Package(
             name: "Hlopya",
             dependencies: ["FluidAudio", "Yams"],
             path: "Hlopya",
-            exclude: ["Info.plist", "Hlopya.entitlements", "Assets.xcassets"]
+            exclude: ["Info.plist", "Hlopya.entitlements", "Assets.xcassets"],
+            swiftSettings: [.swiftLanguageMode(.v5)]
         ),
     ]
 )

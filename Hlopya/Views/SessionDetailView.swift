@@ -9,6 +9,9 @@ struct SessionDetailView: View {
     @State private var titleText = ""
     @State private var selectedTab: NoteTab = .myNotes
     @State private var showDebugLog = false
+    @State private var searchText = ""
+    @State private var titleHovered = false
+    @Namespace private var tabAnimation
 
     enum NoteTab: String {
         case myNotes = "My Notes"
@@ -17,41 +20,50 @@ struct SessionDetailView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Header
-            headerArea
-                .padding(.horizontal, 24)
-                .padding(.top, 20)
-                .padding(.bottom, 12)
+            // Header + tab bar with glass background
+            VStack(spacing: 0) {
+                headerArea
+                    .padding(.horizontal, 24)
+                    .padding(.top, 20)
+                    .padding(.bottom, 12)
 
-            // Notes tab bar + action buttons
-            HStack(spacing: 0) {
-                ForEach(noteTabs, id: \.self) { tab in
-                    Button {
-                        selectedTab = tab
-                    } label: {
-                        VStack(spacing: 4) {
-                            Text(tab.rawValue)
-                                .font(.system(size: 13, weight: selectedTab == tab ? .semibold : .regular))
-                                .foregroundStyle(selectedTab == tab ? .primary : .secondary)
-                            Rectangle()
-                                .fill(selectedTab == tab ? Color.accentColor : .clear)
-                                .frame(height: 2)
+                // Notes tab bar + action buttons
+                HStack(spacing: 0) {
+                    ForEach(noteTabs, id: \.self) { tab in
+                        Button {
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                selectedTab = tab
+                            }
+                        } label: {
+                            VStack(spacing: 4) {
+                                Text(tab.rawValue)
+                                    .font(.system(size: 13, weight: selectedTab == tab ? .semibold : .regular))
+                                    .foregroundStyle(selectedTab == tab ? .primary : .secondary)
+                                ZStack {
+                                    Rectangle()
+                                        .fill(.clear)
+                                        .frame(height: 2)
+                                    if selectedTab == tab {
+                                        Rectangle()
+                                            .fill(Color.accentColor)
+                                            .frame(height: 2)
+                                            .matchedGeometryEffect(id: "tabIndicator", in: tabAnimation)
+                                    }
+                                }
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.top, 8)
                         }
-                        .padding(.horizontal, 16)
-                        .padding(.top, 8)
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
-                }
-                Spacer()
-                actionButtons
-            }
-            .padding(.horizontal, 20)
-            .background(
-                VStack(spacing: 0) {
                     Spacer()
-                    Divider()
+                    actionButtons
                 }
-            )
+                .padding(.horizontal, 20)
+
+                Divider()
+            }
+            .background(.ultraThinMaterial)
 
             // Split: notes on top, transcript on bottom
             if vm.detailTranscript != nil {
@@ -69,14 +81,25 @@ struct SessionDetailView: View {
                     VStack(spacing: 0) {
                         // Transcript header
                         HStack {
-                            Label("Transcript", systemImage: "waveform")
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundStyle(.secondary)
+                            SectionHeader(title: "Transcript", icon: "waveform")
                             Spacer()
                         }
                         .padding(.horizontal, 16)
                         .padding(.vertical, 8)
                         .background(Color(nsColor: .controlBackgroundColor).opacity(0.5))
+
+                        Divider()
+
+                        // Search in transcript
+                        HStack {
+                            Image(systemName: "magnifyingglass")
+                                .foregroundStyle(.tertiary)
+                            TextField("Search transcript...", text: $searchText)
+                                .textFieldStyle(.plain)
+                                .font(HlopTypography.body)
+                        }
+                        .padding(.horizontal, HlopSpacing.lg)
+                        .padding(.vertical, HlopSpacing.sm)
 
                         Divider()
 
@@ -154,9 +177,18 @@ struct SessionDetailView: View {
                 .font(.system(size: 20, weight: .bold))
                 .onExitCommand { editingTitle = false }
             } else {
-                Text(vm.selectedSession?.displayTitle ?? "")
-                    .font(.system(size: 20, weight: .bold))
-                    .onTapGesture { editingTitle = true }
+                HStack(spacing: 6) {
+                    Text(vm.selectedSession?.displayTitle ?? "")
+                        .font(.system(size: 20, weight: .bold))
+                    Image(systemName: "pencil")
+                        .font(.system(size: 14))
+                        .foregroundStyle(.tertiary)
+                        .opacity(titleHovered ? 1 : 0)
+                }
+                .onHover { titleHovered = $0 }
+                .onTapGesture { editingTitle = true }
+                .accessibilityLabel("Edit title")
+                .accessibilityHint("Click to edit meeting title")
             }
 
             if let session = vm.selectedSession {
@@ -195,11 +227,11 @@ struct SessionDetailView: View {
             if vm.audioCapture.isRecording {
                 // During recording - no action buttons, just chill
             } else if vm.isProcessing {
-                ProgressView()
-                    .controlSize(.small)
-                Text("Processing...")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
+                ProcessingProgress(
+                    stage: vm.processLog.isEmpty
+                        ? "Processing..."
+                        : String(vm.processLog.split(separator: "\n").last ?? "Processing...")
+                )
             } else {
                 if vm.selectedSession?.hasNotes != true {
                     Button {
@@ -212,6 +244,7 @@ struct SessionDetailView: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
+                    .accessibilityLabel("Process session")
                 } else if vm.selectedSession?.hasTranscript != true {
                     Button {
                         if let id = vm.selectedSessionId {
@@ -223,6 +256,7 @@ struct SessionDetailView: View {
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
+                    .accessibilityLabel("Transcribe session")
                 }
             }
         }
@@ -252,10 +286,7 @@ struct SessionDetailView: View {
 
     private func actionItemsSection(_ items: [ActionItem]) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("ACTION ITEMS")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.secondary)
-                .tracking(1)
+            SectionHeader(title: "Action Items", icon: "checklist")
                 .padding(.top, 8)
 
             ForEach(items) { item in
@@ -268,17 +299,14 @@ struct SessionDetailView: View {
 
     private func decisionsSection(_ decisions: [String]) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("DECISIONS")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.secondary)
-                .tracking(1)
+            SectionHeader(title: "Decisions", icon: "checkmark.seal")
                 .padding(.top, 8)
 
             ForEach(decisions, id: \.self) { d in
                 HStack(alignment: .top, spacing: 8) {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.system(size: 12))
-                        .foregroundStyle(.green)
+                        .foregroundStyle(HlopColors.statusDone)
                     Text(d)
                         .font(.system(size: 14))
                 }
@@ -359,7 +387,7 @@ struct SessionDetailView: View {
                     ForEach(sorted, id: \.key) { speaker, pct in
                         let isMe = speaker == "Me" || speaker == "Vadim"
                         RoundedRectangle(cornerRadius: 2)
-                            .fill(isMe ? Color.green : Color.cyan)
+                            .fill(isMe ? HlopColors.statusMe : HlopColors.statusThem)
                             .frame(width: max(geo.size.width * (pct / 100), 4))
                     }
                 }
@@ -373,7 +401,7 @@ struct SessionDetailView: View {
                     let displayName = names[speaker] ?? speaker
                     HStack(spacing: 4) {
                         Circle()
-                            .fill(isMe ? Color.green : Color.cyan)
+                            .fill(isMe ? HlopColors.statusMe : HlopColors.statusThem)
                             .frame(width: 6, height: 6)
                         Text("\(displayName) \(Int(pct))%")
                             .font(.system(size: 11))

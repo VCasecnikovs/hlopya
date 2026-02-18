@@ -13,20 +13,21 @@ struct SetupWizardView: View {
     var body: some View {
         VStack(spacing: 0) {
             // Header
-            VStack(spacing: 6) {
+            VStack(spacing: HlopSpacing.sm) {
                 Image(systemName: "mic.badge.xmark")
                     .font(.system(size: 48))
                     .foregroundStyle(.secondary)
                 Text("Welcome to Hlopya")
-                    .font(.title.bold())
+                    .font(HlopTypography.title)
                 Text("Meeting recorder & note-taker")
+                    .font(HlopTypography.body)
                     .foregroundStyle(.secondary)
             }
             .padding(.top, 32)
-            .padding(.bottom, 24)
+            .padding(.bottom, HlopSpacing.xxl)
 
             // Steps
-            VStack(spacing: 16) {
+            VStack(spacing: HlopSpacing.lg) {
                 permissionsStep
                 modelStep
                 claudeStep
@@ -47,15 +48,17 @@ struct SetupWizardView: View {
             .disabled(!canProceed)
             .padding(.horizontal, 40)
             .padding(.bottom, 28)
+            .accessibilityLabel("Get started with Hlopya")
 
             if !canProceed {
                 Text("Grant microphone permission to continue")
-                    .font(.caption)
+                    .font(HlopTypography.caption)
                     .foregroundStyle(.secondary)
-                    .padding(.bottom, 16)
+                    .padding(.bottom, HlopSpacing.lg)
             }
         }
-        .frame(width: 520, height: 560)
+        .frame(maxWidth: 520)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .task {
             checkClaude()
         }
@@ -75,7 +78,7 @@ struct SetupWizardView: View {
                 Text("Microphone")
                 Spacer()
                 if micStatus == .authorized {
-                    Text("Granted").foregroundStyle(.green)
+                    Text("Granted").foregroundStyle(HlopColors.statusDone)
                 } else if micStatus == .denied || micStatus == .restricted {
                     Button("Open System Settings") {
                         openPrivacySettings()
@@ -86,17 +89,18 @@ struct SetupWizardView: View {
                         requestMicPermission()
                     }
                     .controlSize(.small)
+                    .accessibilityLabel("Grant microphone permission")
                 }
             }
 
             // System Audio
             HStack {
                 Image(systemName: "info.circle")
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(HlopColors.primary)
                 Text("System Audio")
                 Spacer()
                 Text("Prompted on first record")
-                    .font(.caption)
+                    .font(HlopTypography.caption)
                     .foregroundStyle(.secondary)
             }
         }
@@ -112,12 +116,12 @@ struct SetupWizardView: View {
                 Spacer()
 
                 if vm.transcriptionService.isModelLoaded {
-                    Text("Ready").foregroundStyle(.green)
+                    Text("Ready").foregroundStyle(HlopColors.statusDone)
                 } else if vm.transcriptionService.isDownloading {
                     ProgressView(value: vm.transcriptionService.downloadProgress)
                         .frame(width: 100)
                     Text("\(Int(vm.transcriptionService.downloadProgress * 100))%")
-                        .font(.caption.monospacedDigit())
+                        .font(HlopTypography.caption.monospacedDigit())
                         .foregroundStyle(.secondary)
                         .frame(width: 32, alignment: .trailing)
                 } else {
@@ -125,12 +129,13 @@ struct SetupWizardView: View {
                         Task { try? await vm.transcriptionService.loadModel() }
                     }
                     .controlSize(.small)
+                    .accessibilityLabel("Download speech model")
                 }
             }
 
             if !vm.transcriptionService.isModelLoaded && !vm.transcriptionService.isDownloading {
                 Text("You can also download later from Settings.")
-                    .font(.caption)
+                    .font(HlopTypography.caption)
                     .foregroundStyle(.secondary)
             }
         }
@@ -151,7 +156,7 @@ struct SetupWizardView: View {
                     Text("Found")
                     Spacer()
                     Text(path)
-                        .font(.caption)
+                        .font(HlopTypography.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .truncationMode(.middle)
@@ -168,7 +173,7 @@ struct SetupWizardView: View {
 
             if claudePath == nil && !isCheckingClaude {
                 Text("Optional - app works without it, but can't generate AI notes.")
-                    .font(.caption)
+                    .font(HlopTypography.caption)
                     .foregroundStyle(.secondary)
             }
         }
@@ -179,7 +184,7 @@ struct SetupWizardView: View {
     @ViewBuilder
     private func statusIcon(for done: Bool) -> some View {
         Image(systemName: done ? "checkmark.circle.fill" : "circle")
-            .foregroundStyle(done ? .green : .secondary)
+            .foregroundStyle(done ? HlopColors.statusDone : .secondary)
     }
 
     private func requestMicPermission() {
@@ -216,7 +221,7 @@ private struct StepCard<Content: View>: View {
     @ViewBuilder var content: Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: HlopSpacing.sm) {
             HStack(alignment: .firstTextBaseline) {
                 Text("\(number).")
                     .font(.headline.monospacedDigit())
@@ -225,7 +230,7 @@ private struct StepCard<Content: View>: View {
                     .font(.headline)
                 if optional {
                     Text("optional")
-                        .font(.caption)
+                        .font(HlopTypography.caption)
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
@@ -236,6 +241,13 @@ private struct StepCard<Content: View>: View {
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.background.secondary, in: RoundedRectangle(cornerRadius: 10))
+        .background {
+            RoundedRectangle(cornerRadius: 10)
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(.white.opacity(0.1), lineWidth: 0.5)
+                )
+        }
     }
 }

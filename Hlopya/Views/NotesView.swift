@@ -36,22 +36,24 @@ struct NotesView: View {
                     }
                 } label: {
                     Label(showCopied ? "Copied" : "Copy", systemImage: showCopied ? "checkmark" : "doc.on.doc")
-                        .font(.system(size: 12))
+                        .font(HlopTypography.footnote)
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(showCopied ? .green : .secondary)
+                .foregroundStyle(showCopied ? HlopColors.statusDone : .secondary)
+                .accessibilityLabel("Copy notes")
 
                 Button {
                     editText = markdown
                     isEditing = true
                 } label: {
                     Label("Edit", systemImage: "pencil")
-                        .font(.system(size: 12))
+                        .font(HlopTypography.footnote)
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
+                .accessibilityLabel("Edit notes")
             }
-            .padding(.bottom, 12)
+            .padding(.bottom, HlopSpacing.md)
 
             // Notes content
             ForEach(parsedBlocks) { block in
@@ -66,29 +68,31 @@ struct NotesView: View {
     private var editMode: some View {
         VStack(alignment: .leading, spacing: 10) {
             TextEditor(text: $editText)
-                .font(.system(size: 14))
+                .font(HlopTypography.callout)
                 .frame(minHeight: 300)
                 .scrollContentBackground(.hidden)
                 .padding(14)
-                .background(Color(nsColor: .controlBackgroundColor))
+                .background(.ultraThinMaterial)
                 .clipShape(RoundedRectangle(cornerRadius: 10))
                 .overlay(
                     RoundedRectangle(cornerRadius: 10)
-                        .stroke(Color.accentColor.opacity(0.5), lineWidth: 1)
+                        .stroke(HlopColors.primary.opacity(0.3), lineWidth: 1)
                 )
 
-            HStack(spacing: 8) {
+            HStack(spacing: HlopSpacing.sm) {
                 Button("Save") {
                     onSave(editText)
                     isEditing = false
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
+                .accessibilityLabel("Save changes")
 
                 Button("Cancel") {
                     isEditing = false
                 }
                 .controlSize(.small)
+                .accessibilityLabel("Cancel editing")
             }
         }
     }
@@ -127,24 +131,24 @@ struct NotesView: View {
 
         case .header:
             Text(block.text)
-                .font(.system(size: 16, weight: .semibold))
-                .padding(.top, 16)
-                .padding(.bottom, 4)
+                .font(HlopTypography.title3)
+                .padding(.top, HlopSpacing.lg)
+                .padding(.bottom, HlopSpacing.xs)
 
         case .userNote:
             HStack(alignment: .top, spacing: 0) {
                 RoundedRectangle(cornerRadius: 1)
-                    .fill(Color.accentColor)
+                    .fill(HlopColors.primary)
                     .frame(width: 3)
                 Text(block.text)
-                    .font(.system(size: 14, weight: .semibold))
-                    .padding(.leading, 12)
+                    .font(HlopTypography.callout).fontWeight(.semibold)
+                    .padding(.leading, HlopSpacing.md)
             }
             .padding(.vertical, 3)
 
         case .aiContext:
             Text(block.text)
-                .font(.system(size: 14))
+                .font(HlopTypography.callout)
                 .foregroundStyle(.secondary)
                 .padding(.leading, 15)
                 .padding(.vertical, 1)

@@ -19,14 +19,21 @@ struct HlopyaApp: App {
             if setupComplete {
                 ContentView()
                     .environment(viewModel)
-                    .frame(minWidth: 700, minHeight: 500)
             } else {
                 SetupWizardView()
                     .environment(viewModel)
             }
         }
-        .defaultSize(width: setupComplete ? 900 : 520, height: setupComplete ? 650 : 560)
+        .defaultSize(width: 900, height: 650)
         .windowResizability(.contentSize)
+        .commands {
+            CommandGroup(after: .appSettings) {
+                Button(viewModel.audioCapture.isRecording ? "Stop Recording" : "Start Recording") {
+                    Task { await viewModel.toggleRecording() }
+                }
+                .keyboardShortcut("r", modifiers: .command)
+            }
+        }
 
         // Menu bar
         MenuBarExtra("Hlopya", systemImage: "mic.circle.fill") {
@@ -37,10 +44,12 @@ struct HlopyaApp: App {
                 Button("Stop Recording") {
                     Task { await viewModel.stopRecording() }
                 }
+                .keyboardShortcut("r", modifiers: .command)
             } else {
                 Button("Start Recording") {
                     Task { await viewModel.startRecording() }
                 }
+                .keyboardShortcut("r", modifiers: .command)
             }
             Divider()
             Button("Show Window") {
@@ -49,6 +58,7 @@ struct HlopyaApp: App {
                     window.makeKeyAndOrderFront(nil)
                 }
             }
+            .keyboardShortcut("o", modifiers: .command)
             Divider()
             Button("Quit") {
                 if viewModel.audioCapture.isRecording {
@@ -60,6 +70,7 @@ struct HlopyaApp: App {
                     NSApp.terminate(nil)
                 }
             }
+            .keyboardShortcut("q", modifiers: .command)
         }
 
         // Settings

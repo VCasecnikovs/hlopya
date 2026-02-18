@@ -22,8 +22,12 @@ struct SessionListView: View {
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 7)
-                .background(Color(nsColor: .controlBackgroundColor))
+                .background(.ultraThinMaterial)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(.white.opacity(0.15), lineWidth: 0.5)
+                )
                 .opacity(vm.audioCapture.isRecording ? 0.4 : 1)
 
                 // Record button
@@ -54,6 +58,9 @@ struct SessionListView: View {
                 .buttonStyle(.borderedProminent)
                 .tint(vm.audioCapture.isRecording ? .red : .accentColor)
                 .controlSize(.large)
+                .shimmer(isActive: vm.audioCapture.isRecording)
+                .accessibilityLabel(vm.audioCapture.isRecording ? "Stop recording" : "Start recording")
+                .accessibilityHint("Double-tap to toggle recording")
 
                 // Recording indicator - always in layout, shown via opacity
                 HStack(spacing: 6) {
@@ -76,30 +83,19 @@ struct SessionListView: View {
                 .opacity(vm.audioCapture.isRecording ? 1 : 0)
             }
             .padding(14)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(HlopColors.recordingPulse)
+                    .opacity(vm.audioCapture.isRecording ? 1 : 0)
+                    .animation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true), value: vm.audioCapture.isRecording)
+            )
 
             // Error banner
             if let error = vm.audioCapture.lastError {
-                HStack(spacing: 8) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
-                        .font(.system(size: 13))
-                    Text(error)
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(3)
-                    Spacer(minLength: 0)
-                    Button {
-                        vm.audioCapture.lastError = nil
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 10))
-                            .foregroundStyle(.tertiary)
-                    }
-                    .buttonStyle(.plain)
-                }
-                .padding(10)
-                .background(Color.orange.opacity(0.08))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
+                InlineErrorCard(
+                    message: error,
+                    onDismiss: { vm.audioCapture.lastError = nil }
+                )
                 .padding(.horizontal, 14)
                 .padding(.bottom, 8)
             }
@@ -114,10 +110,27 @@ struct SessionListView: View {
                 SessionRow(
                     session: session,
                     isProcessing: vm.processingSessionId == session.id,
-                    onDelete: { sessionToDelete = session }
+                    onDelete: { sessionToDelete = session },
+                    onProcess: {
+                        Task { await vm.processSession(session.id) }
+                    },
+                    onTranscribe: {
+                        Task { await vm.transcribeSession(session.id) }
+                    }
                 )
                 .tag(session.id)
                 .contextMenu {
+                    Button {
+                        Task { await vm.processSession(session.id) }
+                    } label: {
+                        Label("Process", systemImage: "sparkles")
+                    }
+                    Button {
+                        Task { await vm.transcribeSession(session.id) }
+                    } label: {
+                        Label("Transcribe", systemImage: "waveform")
+                    }
+                    Divider()
                     Button("Delete", role: .destructive) {
                         sessionToDelete = session
                     }
@@ -125,7 +138,7 @@ struct SessionListView: View {
             }
             .listStyle(.sidebar)
         }
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(.ultraThinMaterial)
         .alert("Delete Recording?", isPresented: Binding(
             get: { sessionToDelete != nil },
             set: { if !$0 { sessionToDelete = nil } }
@@ -149,6 +162,8 @@ struct SessionRow: View {
     let session: Session
     let isProcessing: Bool
     let onDelete: () -> Void
+    var onProcess: (() -> Void)?
+    var onTranscribe: (() -> Void)?
     @State private var isHovered = false
 
     var body: some View {
@@ -169,6 +184,7 @@ struct SessionRow: View {
                 }
                 .buttonStyle(.plain)
                 .opacity(isHovered ? 1 : 0)
+                .accessibilityLabel("Delete recording")
             }
 
             HStack(spacing: 6) {
@@ -184,39 +200,19 @@ struct SessionRow: View {
 
                 Spacer()
 
-                StatusBadge(
-                    status: session.status,
-                    isProcessing: isProcessing
-                )
+                GlassBadge(text: statusLabel, color: statusColor)
             }
         }
         .padding(.vertical, 4)
         .onHover { isHovered = $0 }
         .animation(.easeInOut(duration: 0.15), value: isHovered)
     }
-}
 
-// MARK: - Status Badge
+    // MARK: - Status Helpers
 
-struct StatusBadge: View {
-    let status: SessionStatus
-    let isProcessing: Bool
-
-    var body: some View {
-        Text(label)
-            .font(.system(size: 9, weight: .bold))
-            .textCase(.uppercase)
-            .tracking(0.5)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(bgColor.opacity(0.15))
-            .foregroundStyle(bgColor)
-            .clipShape(RoundedRectangle(cornerRadius: 4))
-    }
-
-    private var label: String {
+    private var statusLabel: String {
         if isProcessing { return "..." }
-        switch status {
+        switch session.status {
         case .recording: return "REC"
         case .recorded: return "NEW"
         case .transcribed: return "STT"
@@ -224,13 +220,13 @@ struct StatusBadge: View {
         }
     }
 
-    private var bgColor: Color {
-        if isProcessing { return .purple }
-        switch status {
-        case .recording: return .red
-        case .recorded: return .orange
-        case .transcribed: return .cyan
-        case .done: return .green
+    private var statusColor: Color {
+        if isProcessing { return HlopColors.statusProcessing }
+        switch session.status {
+        case .recording: return HlopColors.recordingBadge
+        case .recorded: return HlopColors.statusNew
+        case .transcribed: return HlopColors.statusSTT
+        case .done: return HlopColors.statusDone
         }
     }
 }

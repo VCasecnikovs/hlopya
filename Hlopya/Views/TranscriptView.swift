@@ -9,8 +9,16 @@ struct TranscriptView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Copy button
-            HStack {
+            // Speaker color legend + copy button
+            HStack(spacing: HlopSpacing.lg) {
+                HStack(spacing: HlopSpacing.xs) {
+                    Circle().fill(HlopColors.statusMe).frame(width: 6, height: 6)
+                    Text("Me").font(HlopTypography.footnote).foregroundStyle(.secondary)
+                }
+                HStack(spacing: HlopSpacing.xs) {
+                    Circle().fill(HlopColors.statusThem).frame(width: 6, height: 6)
+                    Text("Them").font(HlopTypography.footnote).foregroundStyle(.secondary)
+                }
                 Spacer()
                 Button {
                     let plain = parsedLines.map { line in
@@ -27,12 +35,13 @@ struct TranscriptView: View {
                     }
                 } label: {
                     Label(showCopied ? "Copied" : "Copy", systemImage: showCopied ? "checkmark" : "doc.on.doc")
-                        .font(.system(size: 12))
+                        .font(HlopTypography.footnote)
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(showCopied ? .green : .secondary)
+                .foregroundStyle(showCopied ? HlopColors.statusDone : .secondary)
+                .accessibilityLabel("Copy transcript")
             }
-            .padding(.bottom, 12)
+            .padding(.bottom, HlopSpacing.md)
 
             // Transcript lines
             ForEach(parsedLines) { line in
@@ -114,16 +123,16 @@ struct TranscriptLineView: View {
         HStack(alignment: .firstTextBaseline, spacing: 0) {
             if let speaker = line.displaySpeaker {
                 Text(speaker)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(line.isMe ? .green : .cyan)
+                    .font(HlopTypography.body).fontWeight(.semibold)
+                    .foregroundStyle(line.isMe ? HlopColors.statusMe : HlopColors.statusThem)
                     .frame(width: 80, alignment: .trailing)
             }
 
             if let ts = line.timestamp {
                 Text(formatTimestamp(ts))
-                    .font(.system(size: 10, design: .monospaced))
+                    .font(HlopTypography.monoCaption)
                     .foregroundStyle(.tertiary)
-                    .padding(.leading, 8)
+                    .padding(.leading, HlopSpacing.sm)
                     .frame(width: 60)
             } else {
                 Spacer()
@@ -131,9 +140,9 @@ struct TranscriptLineView: View {
             }
 
             Text(line.text)
-                .font(.system(size: 13))
+                .font(HlopTypography.body)
                 .foregroundStyle(.primary)
-                .padding(.leading, 8)
+                .padding(.leading, HlopSpacing.sm)
         }
         .padding(.vertical, 3)
     }

@@ -89,15 +89,16 @@ private struct NubContent: View {
         HStack(spacing: 10) {
             // Pulsing red dot
             Circle()
-                .fill(.red)
+                .fill(HlopColors.recordingDot)
                 .frame(width: 8, height: 8)
                 .opacity(timer.dotOpacity)
 
             // Timer - fixed width so it doesn't jump
             Text(timer.formattedTime)
-                .font(.system(size: 14, weight: .medium, design: .monospaced))
+                .font(HlopTypography.monoTimer)
                 .foregroundStyle(.primary)
                 .fixedSize()
+                .accessibilityLabel("Recording time: \(timer.formattedTime)")
 
             // Stop button
             Button(action: onStop) {
@@ -105,15 +106,27 @@ private struct NubContent: View {
                     .font(.system(size: 10))
                     .foregroundStyle(.white)
                     .frame(width: 24, height: 24)
-                    .background(.red.opacity(0.8))
+                    .background(HlopColors.recordingBadge.opacity(0.8))
                     .clipShape(Circle())
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Stop recording")
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
-        .background(.ultraThinMaterial, in: Capsule())
-        .overlay(Capsule().stroke(.red.opacity(0.3), lineWidth: 0.5))
+        .padding(.horizontal, HlopSpacing.lg)
+        .padding(.vertical, HlopSpacing.sm)
+        .background {
+            Capsule()
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    Capsule()
+                        .fill(Color.red.opacity(0.08))
+                )
+                .overlay(
+                    Capsule()
+                        .stroke(Color.red.opacity(0.25), lineWidth: 0.5)
+                )
+        }
+        .shimmer(isActive: true)
         .shadow(color: .black.opacity(0.15), radius: 8, y: 2)
         .fixedSize()
         .onTapGesture {
