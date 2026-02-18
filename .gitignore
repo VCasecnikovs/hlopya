@@ -1,15 +1,5 @@
-node_modules/
-gui/node_modules/
-gui/dist/
-gui/build/icon.iconset/
-audiocap/.build/
-audiocap/AudioCap.app/
-audiocap/system.wav
-__pycache__/
-*.pyc
-*.wav
-*.egg-info/
-dist/
-# Keep gui/build/icon.icns but ignore build artifacts
-gui/build/icon.iconset/
-gui/build/create-icon.py
+.build/
+.swiftpm/
+*.xcodeproj
+DerivedData/
+.DS_Store

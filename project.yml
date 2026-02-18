@@ -1,0 +1,38 @@
+name: Hlopya
+options:
+  bundleIdPrefix: com.vadims
+  deploymentTarget:
+    macOS: "14.2"
+  xcodeVersion: "15.0"
+
+packages:
+  FluidAudio:
+    url: https://github.com/FluidInference/FluidAudio.git
+    from: 0.7.9
+  Yams:
+    url: https://github.com/jpsim/Yams.git
+    from: 5.0.0
+
+targets:
+  Hlopya:
+    type: application
+    platform: macOS
+    sources: Hlopya
+    settings:
+      base:
+        INFOPLIST_FILE: Hlopya/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Hlopya/Hlopya.entitlements
+        PRODUCT_BUNDLE_IDENTIFIER: com.vadims.hlopya
+        MARKETING_VERSION: 2.0.0
+        CURRENT_PROJECT_VERSION: 1
+        SWIFT_VERSION: "5.9"
+        MACOSX_DEPLOYMENT_TARGET: "14.2"
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: "3S29L64542"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION: "YES"
+    dependencies:
+      - package: FluidAudio
+      - package: Yams
+    entitlements:
+      path: Hlopya/Hlopya.entitlements
