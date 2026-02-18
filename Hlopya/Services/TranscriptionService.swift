@@ -93,26 +93,78 @@ final class TranscriptionService {
     }
 
     private func buildSegments(from result: ASRResult, speaker: String) -> [TranscriptSegment] {
-        // ASRResult contains text and timing info
-        // We treat the whole result as one segment if no word timings available
         let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return [] }
 
-        // Try to split into sentences for better segmentation
-        let sentences = splitIntoSentences(text)
-        if sentences.count <= 1 {
-            return [TranscriptSegment(speaker: speaker, start: 0, end: 0, text: text)]
+        // Use token timings if available (Parakeet v3 provides these)
+        if let timings = result.tokenTimings, !timings.isEmpty {
+            return buildSegmentsFromTimings(timings, speaker: speaker, audioDuration: result.duration)
         }
 
-        // Distribute timestamps evenly across sentences (rough approximation)
+        // Fallback: distribute evenly across audio duration
+        let sentences = splitIntoSentences(text)
+        let duration = result.duration > 0 ? result.duration : 1.0
+        let perSentence = duration / Double(sentences.count)
+
         return sentences.enumerated().map { idx, sentence in
             TranscriptSegment(
                 speaker: speaker,
-                start: 0,
-                end: 0,
+                start: Double(idx) * perSentence,
+                end: Double(idx + 1) * perSentence,
                 text: sentence
             )
         }
+    }
+
+    /// Group token timings into sentence-level segments with real timestamps
+    private func buildSegmentsFromTimings(_ timings: [TokenTiming], speaker: String, audioDuration: TimeInterval) -> [TranscriptSegment] {
+        var segments: [TranscriptSegment] = []
+        var currentTokens: [TokenTiming] = []
+
+        // Sentence-ending punctuation
+        let sentenceEnders: Set<Character> = [".", "!", "?"]
+        // Minimum segment duration (seconds) to avoid micro-segments
+        let minSegmentDuration: Double = 2.0
+        // Maximum segment duration before forcing a split
+        let maxSegmentDuration: Double = 30.0
+
+        for timing in timings {
+            currentTokens.append(timing)
+
+            let tokenText = timing.token.trimmingCharacters(in: .whitespaces)
+            let endsWithPunctuation = tokenText.last.map { sentenceEnders.contains($0) } ?? false
+            let segmentDuration = (currentTokens.last?.endTime ?? 0) - (currentTokens.first?.startTime ?? 0)
+
+            // Split on sentence boundary (if long enough) or when segment is too long
+            let shouldSplit = (endsWithPunctuation && segmentDuration >= minSegmentDuration)
+                || segmentDuration >= maxSegmentDuration
+
+            if shouldSplit {
+                if let seg = makeSegment(from: currentTokens, speaker: speaker) {
+                    segments.append(seg)
+                }
+                currentTokens = []
+            }
+        }
+
+        // Flush remaining tokens
+        if !currentTokens.isEmpty {
+            if let seg = makeSegment(from: currentTokens, speaker: speaker) {
+                segments.append(seg)
+            }
+        }
+
+        return segments
+    }
+
+    /// Create a TranscriptSegment from a group of tokens
+    private func makeSegment(from tokens: [TokenTiming], speaker: String) -> TranscriptSegment? {
+        let text = tokens.map { $0.token }.joined().trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return nil }
+
+        let start = tokens.first?.startTime ?? 0
+        let end = tokens.last?.endTime ?? start
+        return TranscriptSegment(speaker: speaker, start: start, end: end, text: text)
     }
 
     private func splitIntoSentences(_ text: String) -> [String] {
