@@ -1,19 +1,18 @@
 import SwiftUI
 
 /// Displays transcript with speaker-colored segments.
-/// Me = green (accent), Them = cyan
+/// Me = green, Them = cyan. Clean layout with copy button.
 struct TranscriptView: View {
     let markdown: String
     let participantNames: [String: String]
     @State private var showCopied = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 0) {
             // Copy button
             HStack {
                 Spacer()
                 Button {
-                    // Copy plain text version
                     let plain = parsedLines.map { line in
                         let speaker = line.displaySpeaker ?? ""
                         let ts = line.timestamp ?? ""
@@ -27,13 +26,15 @@ struct TranscriptView: View {
                         withAnimation { showCopied = false }
                     }
                 } label: {
-                    Label(showCopied ? "Copied!" : "Copy All", systemImage: showCopied ? "checkmark" : "doc.on.doc")
-                        .font(.caption)
+                    Label(showCopied ? "Copied" : "Copy", systemImage: showCopied ? "checkmark" : "doc.on.doc")
+                        .font(.system(size: 12))
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(showCopied ? .green : .secondary)
             }
+            .padding(.bottom, 12)
 
+            // Transcript lines
             ForEach(parsedLines) { line in
                 TranscriptLineView(line: line)
             }
@@ -54,23 +55,15 @@ struct TranscriptView: View {
                 }
 
                 // Parse: **Speaker** [timestamp]: text
-                if let match = trimmed.range(of: #"\*\*(\w+)\*\*\s*(\[[\d.]+s\])?\s*:?\s*(.*)"#, options: .regularExpression) {
-                    let content = String(trimmed[match])
-                    return parseSegmentLine(content)
+                if trimmed.range(of: #"\*\*(\w+)\*\*"#, options: .regularExpression) != nil {
+                    return parseSegmentLine(trimmed)
                 }
 
-                // Plain text line
-                return TranscriptLine(
-                    id: UUID().uuidString,
-                    speaker: nil, displaySpeaker: nil,
-                    timestamp: nil, text: trimmed,
-                    isMe: false
-                )
+                return nil
             }
     }
 
     private func parseSegmentLine(_ line: String) -> TranscriptLine? {
-        // Extract speaker
         guard let starStart = line.range(of: "**"),
               let starEnd = line[starStart.upperBound...].range(of: "**") else {
             return nil
@@ -79,7 +72,6 @@ struct TranscriptView: View {
         let rawSpeaker = String(line[starStart.upperBound..<starEnd.lowerBound])
         let rest = String(line[starEnd.upperBound...]).trimmingCharacters(in: .whitespaces)
 
-        // Extract optional timestamp
         var timestamp: String?
         var text = rest
         if rest.hasPrefix("["), let closeBracket = rest.firstIndex(of: "]") {
@@ -119,23 +111,47 @@ struct TranscriptLineView: View {
     let line: TranscriptLine
 
     var body: some View {
-        HStack(alignment: .top, spacing: 4) {
+        HStack(alignment: .firstTextBaseline, spacing: 0) {
             if let speaker = line.displaySpeaker {
                 Text(speaker)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(line.isMe ? .green : .cyan)
+                    .frame(width: 80, alignment: .trailing)
             }
 
             if let ts = line.timestamp {
-                Text(ts)
-                    .font(.system(size: 11, design: .monospaced))
+                Text(formatTimestamp(ts))
+                    .font(.system(size: 10, design: .monospaced))
                     .foregroundStyle(.tertiary)
+                    .padding(.leading, 8)
+                    .frame(width: 60)
+            } else {
+                Spacer()
+                    .frame(width: line.displaySpeaker != nil ? 68 : 0)
             }
 
             Text(line.text)
-                .font(.system(size: 14))
+                .font(.system(size: 13))
                 .foregroundStyle(.primary)
+                .padding(.leading, 8)
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 3)
+    }
+
+    /// Convert raw timestamp like "[00:45]" or "[123.4s]" to "0:45" format
+    private func formatTimestamp(_ raw: String) -> String {
+        let cleaned = raw.trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
+        // Already in mm:ss format
+        if cleaned.contains(":") {
+            return cleaned
+        }
+        // Seconds format (e.g. "45.2s" or "123")
+        let numStr = cleaned.replacingOccurrences(of: "s", with: "")
+        if let seconds = Double(numStr) {
+            let m = Int(seconds) / 60
+            let s = Int(seconds) % 60
+            return String(format: "%d:%02d", m, s)
+        }
+        return cleaned
     }
 }

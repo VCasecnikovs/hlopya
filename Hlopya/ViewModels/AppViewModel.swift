@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 /// Central application state - coordinates all services.
 @MainActor
@@ -27,6 +28,7 @@ final class AppViewModel {
     var detailNotes: MeetingNotes?
     var detailPersonalNotes: String = ""
     var detailMeta: SessionMeta?
+    var detailTalkTime: [String: Double] = [:]  // speaker -> percentage
 
     var selectedSession: Session? {
         sessionManager.sessions.first { $0.id == selectedSessionId }
@@ -102,6 +104,33 @@ final class AppViewModel {
             detailMeta = try? JSONDecoder().decode(SessionMeta.self, from: data)
         } else {
             detailMeta = nil
+        }
+
+        // Calculate talk-time percentages from transcript
+        let transcriptPath = dir.appendingPathComponent("transcript.json")
+        if let data = try? Data(contentsOf: transcriptPath),
+           let transcript = try? JSONDecoder().decode(TranscriptResult.self, from: data) {
+            var speakerDurations: [String: Double] = [:]
+            for seg in transcript.segments {
+                let dur = max(seg.end - seg.start, 0)
+                speakerDurations[seg.speaker, default: 0] += dur
+            }
+            let total = speakerDurations.values.reduce(0, +)
+            if total > 0 {
+                detailTalkTime = speakerDurations.mapValues { ($0 / total) * 100 }
+            } else {
+                // Fallback: count by text length
+                let meLen = Double(transcript.meText.count)
+                let themLen = Double(transcript.themText.count)
+                let totalLen = meLen + themLen
+                if totalLen > 0 {
+                    detailTalkTime = ["Me": (meLen / totalLen) * 100, "Them": (themLen / totalLen) * 100]
+                } else {
+                    detailTalkTime = [:]
+                }
+            }
+        } else {
+            detailTalkTime = [:]
         }
     }
 
@@ -236,10 +265,15 @@ final class AppViewModel {
     // MARK: - Nub Panel
 
     private func showNub() {
-        if nubPanel == nil {
-            nubPanel = RecordingNubPanel(viewModel: self)
+        // Defer to next run loop to avoid layout cycle crash during SwiftUI state update
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(100))
+            guard let self, self.audioCapture.isRecording else { return }
+            if self.nubPanel == nil {
+                self.nubPanel = RecordingNubPanel(viewModel: self)
+            }
+            self.nubPanel?.orderFront(nil)
         }
-        nubPanel?.orderFront(nil)
     }
 
     private func hideNub() {

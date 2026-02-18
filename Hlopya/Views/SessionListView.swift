@@ -8,68 +8,100 @@ struct SessionListView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Meeting participant input
-            if !vm.audioCapture.isRecording {
-                HStack(spacing: 6) {
+            // Record controls area - fixed height to avoid layout changes
+            VStack(spacing: 10) {
+                // Meeting participant input
+                HStack(spacing: 8) {
                     Image(systemName: "person.fill")
-                        .foregroundStyle(.secondary)
-                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .font(.system(size: 12))
                     TextField("Meeting with...", text: $meetingWith)
                         .textFieldStyle(.plain)
-                        .font(.caption)
+                        .font(.system(size: 13))
+                        .disabled(vm.audioCapture.isRecording)
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
                 .background(Color(nsColor: .controlBackgroundColor))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-                .padding(.horizontal, 12)
-                .padding(.top, 8)
-            }
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .opacity(vm.audioCapture.isRecording ? 0.4 : 1)
 
-            // Record controls
-            recordButton
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
+                // Record button
+                Button {
+                    var transaction = Transaction()
+                    transaction.disablesAnimations = true
+                    withTransaction(transaction) {
+                        Task {
+                            if !vm.audioCapture.isRecording && !meetingWith.isEmpty {
+                                vm.pendingParticipant = meetingWith
+                            }
+                            await vm.toggleRecording()
+                            if !vm.audioCapture.isRecording {
+                                meetingWith = ""
+                            }
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: vm.audioCapture.isRecording ? "stop.fill" : "record.circle")
+                            .font(.system(size: 14))
+                        Text(vm.audioCapture.isRecording ? "Stop Recording" : "Record")
+                            .fontWeight(.semibold)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(vm.audioCapture.isRecording ? .red : .accentColor)
+                .controlSize(.large)
 
-            // Recording status
-            if vm.audioCapture.isRecording {
+                // Recording indicator - always in layout, shown via opacity
                 HStack(spacing: 6) {
                     Circle()
                         .fill(.red)
                         .frame(width: 8, height: 8)
                         .modifier(PulseAnimation())
                     Text(vm.audioCapture.formattedTime)
-                        .font(.caption)
-                        .foregroundStyle(.red)
+                        .font(.system(size: 13, weight: .medium, design: .monospaced))
+                        .foregroundStyle(.primary)
                     if !meetingWith.isEmpty {
                         Text("with \(meetingWith)")
-                            .font(.caption2)
+                            .font(.system(size: 12))
                             .foregroundStyle(.secondary)
+                            .lineLimit(1)
                     }
+                    Spacer()
                 }
-                .padding(.horizontal, 16)
-                .padding(.bottom, 8)
+                .frame(height: 20)
+                .opacity(vm.audioCapture.isRecording ? 1 : 0)
             }
+            .padding(14)
 
-            // Permission error
+            // Error banner
             if let error = vm.audioCapture.lastError {
-                HStack(spacing: 6) {
+                HStack(spacing: 8) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundStyle(.orange)
-                        .font(.caption)
+                        .font(.system(size: 13))
                     Text(error)
-                        .font(.caption2)
+                        .font(.system(size: 12))
                         .foregroundStyle(.secondary)
                         .lineLimit(3)
+                    Spacer(minLength: 0)
+                    Button {
+                        vm.audioCapture.lastError = nil
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.tertiary)
+                    }
+                    .buttonStyle(.plain)
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(Color.orange.opacity(0.1))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-                .padding(.horizontal, 12)
-                .onTapGesture {
-                    vm.audioCapture.lastError = nil
-                }
+                .padding(10)
+                .background(Color.orange.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .padding(.horizontal, 14)
+                .padding(.bottom, 8)
             }
 
             Divider()
@@ -79,18 +111,21 @@ struct SessionListView: View {
                 get: { vm.selectedSessionId },
                 set: { id in if let id { vm.selectSession(id) } }
             )) { session in
-                SessionRow(session: session, isProcessing: vm.processingSessionId == session.id)
-                    .tag(session.id)
-                    .contextMenu {
-                        Button("Delete", role: .destructive) {
-                            sessionToDelete = session
-                        }
+                SessionRow(
+                    session: session,
+                    isProcessing: vm.processingSessionId == session.id,
+                    onDelete: { sessionToDelete = session }
+                )
+                .tag(session.id)
+                .contextMenu {
+                    Button("Delete", role: .destructive) {
+                        sessionToDelete = session
                     }
+                }
             }
             .listStyle(.sidebar)
         }
-        .frame(minWidth: 240)
-        .navigationTitle("Meetings")
+        .background(Color(nsColor: .windowBackgroundColor))
         .alert("Delete Recording?", isPresented: Binding(
             get: { sessionToDelete != nil },
             set: { if !$0 { sessionToDelete = nil } }
@@ -106,31 +141,6 @@ struct SessionListView: View {
             Text("This will permanently delete the recording and all associated files.")
         }
     }
-
-    private var recordButton: some View {
-        Button {
-            Task {
-                if !vm.audioCapture.isRecording && !meetingWith.isEmpty {
-                    vm.pendingParticipant = meetingWith
-                }
-                await vm.toggleRecording()
-                if !vm.audioCapture.isRecording {
-                    meetingWith = ""
-                }
-            }
-        } label: {
-            HStack {
-                Image(systemName: vm.audioCapture.isRecording ? "stop.fill" : "record.circle")
-                Text(vm.audioCapture.isRecording ? "Stop" : "Record")
-                    .fontWeight(.semibold)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 6)
-        }
-        .buttonStyle(.borderedProminent)
-        .tint(vm.audioCapture.isRecording ? .red : .green)
-        .controlSize(.large)
-    }
 }
 
 // MARK: - Session Row
@@ -138,22 +148,38 @@ struct SessionListView: View {
 struct SessionRow: View {
     let session: Session
     let isProcessing: Bool
+    let onDelete: () -> Void
+    @State private var isHovered = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(session.displayTitle)
-                .font(.system(size: 13, weight: .medium))
-                .lineLimit(1)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .top) {
+                Text(session.displayTitle)
+                    .font(.system(size: 13, weight: .medium))
+                    .lineLimit(2)
 
-            HStack(spacing: 8) {
+                Spacer(minLength: 4)
+
+                Button {
+                    onDelete()
+                } label: {
+                    Image(systemName: "trash")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .opacity(isHovered ? 1 : 0)
+            }
+
+            HStack(spacing: 6) {
                 Text(Session.displayDateFormatter.string(from: session.date))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.tertiary)
 
                 if session.duration > 0 {
                     Text("\(Int(session.duration / 60))m")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.tertiary)
                 }
 
                 Spacer()
@@ -164,7 +190,9 @@ struct SessionRow: View {
                 )
             }
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 4)
+        .onHover { isHovered = $0 }
+        .animation(.easeInOut(duration: 0.15), value: isHovered)
     }
 }
 
@@ -176,11 +204,11 @@ struct StatusBadge: View {
 
     var body: some View {
         Text(label)
-            .font(.system(size: 10, weight: .semibold))
+            .font(.system(size: 9, weight: .bold))
             .textCase(.uppercase)
             .tracking(0.5)
             .padding(.horizontal, 6)
-            .padding(.vertical, 1)
+            .padding(.vertical, 2)
             .background(bgColor.opacity(0.15))
             .foregroundStyle(bgColor)
             .clipShape(RoundedRectangle(cornerRadius: 4))
@@ -190,7 +218,7 @@ struct StatusBadge: View {
         if isProcessing { return "..." }
         switch status {
         case .recording: return "REC"
-        case .recorded: return "REC"
+        case .recorded: return "NEW"
         case .transcribed: return "STT"
         case .done: return "DONE"
         }

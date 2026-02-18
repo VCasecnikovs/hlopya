@@ -1,16 +1,18 @@
 import SwiftUI
 import AppKit
+import Combine
 
-/// Floating 56x56 recording indicator panel.
-/// Uses NSPanel for always-on-top, no-activation behavior.
+/// Floating pill-shaped recording indicator.
 final class RecordingNubPanel: NSPanel {
     private let viewModel: AppViewModel
+    private var nubTimer: NubTimer?
 
     init(viewModel: AppViewModel) {
         self.viewModel = viewModel
 
+        // Wide enough for: dot + "00:00" + stop button + padding
         super.init(
-            contentRect: NSRect(x: 0, y: 0, width: 56, height: 56),
+            contentRect: NSRect(x: 0, y: 0, width: 220, height: 50),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -21,84 +23,104 @@ final class RecordingNubPanel: NSPanel {
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         isOpaque = false
         backgroundColor = .clear
-        hasShadow = false
+        hasShadow = true
         isMovableByWindowBackground = true
 
-        // Position: right side, upper third
         if let screen = NSScreen.main {
-            let x = screen.visibleFrame.maxX - 72
-            let y = screen.visibleFrame.maxY - screen.visibleFrame.height * 0.3
+            let x = screen.visibleFrame.midX - 110
+            let y = screen.visibleFrame.maxY - 56
             setFrameOrigin(NSPoint(x: x, y: y))
         }
 
-        let hostingView = NSHostingView(rootView: NubContent(viewModel: viewModel, panel: self))
+        let timer = NubTimer()
+        self.nubTimer = timer
+        let nubView = NubContent(timer: timer, onStop: { [weak viewModel] in
+            Task { @MainActor in
+                await viewModel?.stopRecording()
+            }
+        })
+        let hostingView = NSHostingView(rootView: nubView)
+        // Let the hosting view use its natural size - no constraints
+        hostingView.frame = NSRect(x: 0, y: 0, width: 220, height: 50)
         contentView = hostingView
+    }
+
+    override func close() {
+        nubTimer?.stop()
+        nubTimer = nil
+        super.close()
     }
 }
 
-/// SwiftUI content for the floating nub
+/// Timer that works reliably in NSPanel (Combine-based, not SwiftUI)
+final class NubTimer: ObservableObject {
+    @Published var formattedTime: String = "00:00"
+    @Published var dotOpacity: Double = 1.0
+    private var timer: Timer?
+    private let startTime = Date()
+
+    init() {
+        // Fire every 0.05s for smooth pulse animation
+        timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            let elapsed = Date().timeIntervalSince(self.startTime)
+            let m = Int(elapsed) / 60
+            let s = Int(elapsed) % 60
+            // Smooth sine-wave pulse: period = 2 seconds
+            let pulse = 0.3 + 0.7 * (0.5 + 0.5 * cos(elapsed * .pi))
+            DispatchQueue.main.async {
+                self.formattedTime = String(format: "%02d:%02d", m, s)
+                self.dotOpacity = pulse
+            }
+        }
+    }
+
+    func stop() {
+        timer?.invalidate()
+        timer = nil
+    }
+}
+
 private struct NubContent: View {
-    let viewModel: AppViewModel
-    let panel: RecordingNubPanel
+    @ObservedObject var timer: NubTimer
+    let onStop: () -> Void
 
     var body: some View {
-        VStack(spacing: 2) {
-            // Audio bars animation
-            HStack(spacing: 2) {
-                ForEach(0..<5, id: \.self) { i in
-                    AudioBar(delay: Double(i) * 0.1)
-                }
-            }
-            .frame(height: 16)
+        HStack(spacing: 10) {
+            // Pulsing red dot
+            Circle()
+                .fill(.red)
+                .frame(width: 8, height: 8)
+                .opacity(timer.dotOpacity)
 
-            // Timer
-            Text(viewModel.audioCapture.formattedTime)
-                .font(.system(size: 9, weight: .bold))
-                .foregroundStyle(.white)
+            // Timer - fixed width so it doesn't jump
+            Text(timer.formattedTime)
+                .font(.system(size: 14, weight: .medium, design: .monospaced))
+                .foregroundStyle(.primary)
+                .fixedSize()
+
+            // Stop button
+            Button(action: onStop) {
+                Image(systemName: "stop.fill")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.white)
+                    .frame(width: 24, height: 24)
+                    .background(.red.opacity(0.8))
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
         }
-        .frame(width: 48, height: 48)
-        .background(
-            RoundedRectangle(cornerRadius: 14)
-                .fill(Color.red.opacity(0.9))
-                .shadow(color: .red.opacity(0.4), radius: 6, y: 2)
-        )
-        .modifier(BreathingAnimation())
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(.ultraThinMaterial, in: Capsule())
+        .overlay(Capsule().stroke(.red.opacity(0.3), lineWidth: 0.5))
+        .shadow(color: .black.opacity(0.15), radius: 8, y: 2)
+        .fixedSize()
         .onTapGesture {
             NSApp.activate(ignoringOtherApps: true)
             if let window = NSApp.windows.first(where: { !($0 is NSPanel) }) {
                 window.makeKeyAndOrderFront(nil)
             }
         }
-    }
-}
-
-/// Single animated audio bar
-private struct AudioBar: View {
-    let delay: Double
-    @State private var isAnimating = false
-
-    var body: some View {
-        RoundedRectangle(cornerRadius: 2)
-            .fill(.white)
-            .frame(width: 3, height: isAnimating ? 8 : 14)
-            .animation(
-                .easeInOut(duration: 0.8)
-                .repeatForever()
-                .delay(delay),
-                value: isAnimating
-            )
-            .onAppear { isAnimating = true }
-    }
-}
-
-/// Subtle scale breathing animation
-private struct BreathingAnimation: ViewModifier {
-    @State private var isBreathing = false
-
-    func body(content: Content) -> some View {
-        content
-            .scaleEffect(isBreathing ? 1.05 : 1.0)
-            .animation(.easeInOut(duration: 2.0).repeatForever(), value: isBreathing)
-            .onAppear { isBreathing = true }
     }
 }

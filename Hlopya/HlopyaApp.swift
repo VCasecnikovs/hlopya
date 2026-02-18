@@ -4,6 +4,14 @@ import SwiftUI
 struct HlopyaApp: App {
     @State private var viewModel = AppViewModel()
 
+    init() {
+        // Workaround: suppress re-entrant constraint update assertion crash.
+        // This is a known AppKit/SwiftUI bug where NSHostingView.updateAnimatedWindowSize
+        // triggers setNeedsUpdateConstraints during a display cycle.
+        // See: https://github.com/utmapp/UTM/issues/4691
+        UserDefaults.standard.set(false, forKey: "NSWindowAssertWhenDisplayCycleLimitReached")
+    }
+
     var body: some Scene {
         // Main window
         WindowGroup {
@@ -12,6 +20,7 @@ struct HlopyaApp: App {
                 .frame(minWidth: 700, minHeight: 500)
         }
         .defaultSize(width: 900, height: 650)
+        .windowResizability(.contentSize)
 
         // Menu bar
         MenuBarExtra("Hlopya", systemImage: "mic.circle.fill") {
