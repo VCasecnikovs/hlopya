@@ -9,17 +9,21 @@ import SwiftUI
 ///   ⌘1 / ⌘2 - Switch detail tabs (requires SessionDetailView refactor)
 struct ContentView: View {
     @Environment(AppViewModel.self) private var vm
+    @State private var showVocabulary = false
 
     var body: some View {
         @Bindable var vm = vm
 
         HStack(spacing: 0) {
-            SessionListView()
+            SessionListView(showVocabulary: $showVocabulary)
                 .frame(width: HlopSpacing.sidebarWidth)
 
             Divider()
 
-            if vm.selectedSessionId != nil {
+            if showVocabulary {
+                VocabularyView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if vm.selectedSessionId != nil {
                 SessionDetailView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {

@@ -11,6 +11,7 @@ final class AppViewModel {
     let transcriptionService = TranscriptionService()
     let noteGeneration = NoteGenerationService()
     let obsidianExporter = ObsidianExporter()
+    let vocabularyService = VocabularyService()
 
     // State
     var selectedSessionId: String?
@@ -19,12 +20,15 @@ final class AppViewModel {
     var processLog: String = ""
     var showSettings = false
     var pendingParticipant: String = ""
+    var isVocabConfigured = false
+    var isConfiguringVocab = false
 
     // Nub panel
     private var nubPanel: RecordingNubPanel?
 
     // Detail data (loaded on selection)
     var detailTranscript: String?
+    var detailTranscriptResult: TranscriptResult?
     var detailNotes: MeetingNotes?
     var detailPersonalNotes: String = ""
     var detailMeta: SessionMeta?
@@ -49,7 +53,7 @@ final class AppViewModel {
             }
             NSLog("[Hlopya] Starting recording at %@", session.directoryURL.path)
             try await audioCapture.startRecording(sessionDir: session.directoryURL)
-            selectedSessionId = session.id
+            selectSession(session.id)
             NSLog("[Hlopya] Recording started OK")
             showNub()
         } catch {
@@ -106,10 +110,11 @@ final class AppViewModel {
             detailMeta = nil
         }
 
-        // Calculate talk-time percentages from transcript
+        // Load transcript JSON for talk-time and confidence data
         let transcriptPath = dir.appendingPathComponent("transcript.json")
         if let data = try? Data(contentsOf: transcriptPath),
            let transcript = try? JSONDecoder().decode(TranscriptResult.self, from: data) {
+            detailTranscriptResult = transcript
             var speakerDurations: [String: Double] = [:]
             for seg in transcript.segments {
                 let dur = max(seg.end - seg.start, 0)
@@ -130,6 +135,7 @@ final class AppViewModel {
                 }
             }
         } else {
+            detailTranscriptResult = nil
             detailTalkTime = [:]
         }
     }
@@ -149,12 +155,25 @@ final class AppViewModel {
                 processLog += "Model loaded.\n"
             }
 
+            // Configure vocabulary if available
+            if !vocabularyService.terms.isEmpty && !isVocabConfigured {
+                processLog += "Configuring vocabulary (\(vocabularyService.terms.count) terms)...\n"
+                await configureVocabulary()
+            }
+
             // Transcribe
             processLog += "Transcribing audio...\n"
             let sessionDir = Session.recordingsDirectory.appendingPathComponent(sessionId)
             let transcript = try await transcriptionService.transcribeMeeting(sessionDir: sessionDir)
             try sessionManager.saveTranscript(transcript, sessionId: sessionId)
-            processLog += "Transcription done: \(transcript.numSegments) segments\n"
+            processLog += "Transcription done: \(transcript.numSegments) segments"
+            if let conf = transcript.confidence {
+                processLog += ", confidence: \(String(format: "%.0f", conf * 100))%"
+            }
+            if let rtfx = transcript.rtfx {
+                processLog += ", speed: \(String(format: "%.1f", rtfx))x"
+            }
+            processLog += "\n"
 
             // Generate notes
             processLog += "Generating notes with Claude...\n"
@@ -211,6 +230,27 @@ final class AppViewModel {
         }
     }
 
+    // MARK: - Vocabulary
+
+    func configureVocabulary() async {
+        guard let context = vocabularyService.buildContext() else { return }
+        isConfiguringVocab = true
+        defer { isConfiguringVocab = false }
+
+        do {
+            // Ensure ASR model is loaded first
+            if !transcriptionService.isModelLoaded {
+                try await transcriptionService.loadModel()
+            }
+
+            try await transcriptionService.configureVocabulary(context: context)
+            isVocabConfigured = true
+            print("[App] Vocabulary configured with \(context.terms.count) terms")
+        } catch {
+            print("[App] Vocabulary configuration failed: \(error)")
+        }
+    }
+
     // MARK: - Auto-save
 
     private var notesSaveTask: Task<Void, Never>?
@@ -240,6 +280,7 @@ final class AppViewModel {
             if selectedSessionId == sessionId {
                 selectedSessionId = nil
                 detailTranscript = nil
+                detailTranscriptResult = nil
                 detailNotes = nil
                 detailPersonalNotes = ""
                 detailMeta = nil

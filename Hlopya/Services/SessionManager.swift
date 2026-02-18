@@ -68,20 +68,20 @@ final class SessionManager {
                 title = meta?.title
                 participantNames = meta?.participantNames ?? [:]
 
-                // Read transcript for duration
+                // Read transcript for duration (lightweight - skips segment decoding)
                 if hasTranscript {
                     if let data = try? Data(contentsOf: dir.appendingPathComponent("transcript.json")),
-                       let transcript = try? JSONDecoder().decode(TranscriptResult.self, from: data) {
-                        duration = transcript.durationSeconds
+                       let meta = try? JSONDecoder().decode(TranscriptMeta.self, from: data) {
+                        duration = meta.durationSeconds
                     }
                 }
 
-                // Read notes for title/participants
+                // Read notes for title/participants (lightweight)
                 if hasNotes {
                     if let data = try? Data(contentsOf: dir.appendingPathComponent("notes.json")),
-                       let notes = try? JSONDecoder().decode(MeetingNotes.self, from: data) {
-                        if title == nil { title = notes.title }
-                        participants = notes.participants ?? []
+                       let notesMeta = try? JSONDecoder().decode(NotesMeta.self, from: data) {
+                        if title == nil { title = notesMeta.title }
+                        participants = notesMeta.participants ?? []
                     }
                 }
 
@@ -99,6 +99,20 @@ final class SessionManager {
                 )
             }
             .sorted { $0.id > $1.id }
+    }
+
+    /// Lightweight struct to extract only metadata from transcript.json without decoding all segments
+    private struct TranscriptMeta: Decodable {
+        let durationSeconds: Double
+        enum CodingKeys: String, CodingKey {
+            case durationSeconds = "duration_seconds"
+        }
+    }
+
+    /// Lightweight struct to extract only title/participants from notes.json
+    private struct NotesMeta: Decodable {
+        let title: String?
+        let participants: [String]?
     }
 
     // MARK: - Session Data
@@ -143,8 +157,19 @@ final class SessionManager {
         var md = "# Meeting Transcript\n\n"
         md += "- Model: \(result.modelUsed)\n"
         md += "- Segments: \(result.numSegments)\n"
-        md += "- Processing time: \(String(format: "%.1f", result.processingTime))s\n\n"
-        md += "---\n\n"
+        if result.durationSeconds > 0 {
+            let m = Int(result.durationSeconds) / 60
+            let s = Int(result.durationSeconds) % 60
+            md += "- Duration: \(m)m \(s)s\n"
+        }
+        md += "- Processing time: \(String(format: "%.1f", result.processingTime))s\n"
+        if let rtfx = result.rtfx {
+            md += "- Speed: \(String(format: "%.1f", rtfx))x realtime\n"
+        }
+        if let confidence = result.confidence {
+            md += "- Confidence: \(String(format: "%.0f", confidence * 100))%\n"
+        }
+        md += "\n---\n\n"
         md += result.fullText
         try md.write(to: mdPath, atomically: true, encoding: .utf8)
 

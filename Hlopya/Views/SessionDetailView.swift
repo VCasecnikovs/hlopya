@@ -199,6 +199,15 @@ struct SessionDetailView: View {
                         Label(formatDuration(session.duration), systemImage: "clock")
                     }
 
+                    if let confidence = vm.detailTranscriptResult?.confidence {
+                        Label("\(Int(confidence * 100))%", systemImage: "waveform.badge.magnifyingglass")
+                            .foregroundStyle(confidence < 0.5 ? HlopColors.statusWarning : .secondary)
+                    }
+
+                    if let rtfx = vm.detailTranscriptResult?.rtfx {
+                        Label("\(String(format: "%.1f", rtfx))x", systemImage: "bolt")
+                    }
+
                     if !session.participants.isEmpty {
                         HStack(spacing: 4) {
                             Image(systemName: "person.2")
@@ -347,7 +356,8 @@ struct SessionDetailView: View {
             if let transcript = vm.detailTranscript {
                 TranscriptView(
                     markdown: transcript,
-                    participantNames: vm.selectedSession?.participantNames ?? [:]
+                    participantNames: vm.selectedSession?.participantNames ?? [:],
+                    segments: vm.detailTranscriptResult?.segments ?? []
                 )
             }
         }

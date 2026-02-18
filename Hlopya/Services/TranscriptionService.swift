@@ -30,6 +30,18 @@ final class TranscriptionService {
         print("[TranscriptionService] Parakeet v3 model loaded")
     }
 
+    /// Configure vocabulary boosting with CTC rescoring
+    func configureVocabulary(context: CustomVocabularyContext) async throws {
+        guard let asr = asrManager else {
+            throw TranscriptionError.modelNotLoaded
+        }
+
+        print("[TranscriptionService] Loading CTC model for vocabulary boosting...")
+        let ctcModels = try await CtcModels.downloadAndLoad()
+        try await asr.configureVocabularyBoosting(vocabulary: context, ctcModels: ctcModels)
+        print("[TranscriptionService] Vocabulary boosting configured with \(context.terms.count) terms")
+    }
+
     /// Transcribe a complete meeting from mic.wav and system.wav
     func transcribeMeeting(sessionDir: URL) async throws -> TranscriptResult {
         guard let asr = asrManager else {
@@ -76,6 +88,17 @@ final class TranscriptionService {
         let fullText = lines.joined(separator: "\n")
         let elapsed = Date().timeIntervalSince(startTime)
 
+        // Duration from ASR results (not segment timestamps which can be 0)
+        let audioDuration = max(micResult.duration, sysResult.duration)
+
+        // Overall confidence: weighted average from segments that have confidence
+        let segmentsWithConf = allSegments.compactMap(\.confidence)
+        let overallConfidence: Float? = segmentsWithConf.isEmpty ? nil :
+            segmentsWithConf.reduce(0, +) / Float(segmentsWithConf.count)
+
+        // RTFX: how many times faster than realtime
+        let rtfx: Float? = elapsed > 0 && audioDuration > 0 ? Float(audioDuration / elapsed) : nil
+
         let result = TranscriptResult(
             segments: allSegments,
             fullText: fullText,
@@ -83,12 +106,14 @@ final class TranscriptionService {
             meText: allSegments.filter { $0.speaker == "Me" }.map { $0.text }.joined(separator: " "),
             themText: allSegments.filter { $0.speaker == "Them" }.map { $0.text }.joined(separator: " "),
             numSegments: allSegments.count,
-            durationSeconds: allSegments.last?.end ?? 0,
+            durationSeconds: audioDuration,
             processingTime: elapsed,
-            modelUsed: "parakeet-v3-coreml"
+            modelUsed: "parakeet-v3-coreml",
+            confidence: overallConfidence,
+            rtfx: rtfx
         )
 
-        print("[Transcription] Done: \(result.numSegments) segments in \(String(format: "%.1f", elapsed))s")
+        print("[Transcription] Done: \(result.numSegments) segments in \(String(format: "%.1f", elapsed))s, confidence: \(overallConfidence.map { String(format: "%.0f%%", $0 * 100) } ?? "N/A"), rtfx: \(rtfx.map { String(format: "%.1fx", $0) } ?? "N/A")")
         return result
     }
 
@@ -164,7 +189,8 @@ final class TranscriptionService {
 
         let start = tokens.first?.startTime ?? 0
         let end = tokens.last?.endTime ?? start
-        return TranscriptSegment(speaker: speaker, start: start, end: end, text: text)
+        let avgConfidence = tokens.isEmpty ? nil : tokens.map(\.confidence).reduce(0, +) / Float(tokens.count)
+        return TranscriptSegment(speaker: speaker, start: start, end: end, text: text, confidence: avgConfidence)
     }
 
     private func splitIntoSentences(_ text: String) -> [String] {

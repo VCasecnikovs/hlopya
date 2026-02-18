@@ -5,6 +5,7 @@ import SwiftUI
 struct TranscriptView: View {
     let markdown: String
     let participantNames: [String: String]
+    var segments: [TranscriptSegment] = []
     @State private var showCopied = false
 
     var body: some View {
@@ -52,7 +53,8 @@ struct TranscriptView: View {
     }
 
     private var parsedLines: [TranscriptLine] {
-        markdown
+        var segmentIndex = 0
+        return markdown
             .components(separatedBy: "\n")
             .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
             .compactMap { line -> TranscriptLine? in
@@ -65,7 +67,13 @@ struct TranscriptView: View {
 
                 // Parse: **Speaker** [timestamp]: text
                 if trimmed.range(of: #"\*\*(\w+)\*\*"#, options: .regularExpression) != nil {
-                    return parseSegmentLine(trimmed)
+                    var parsed = parseSegmentLine(trimmed)
+                    // Match confidence from transcript segments by order
+                    if segmentIndex < segments.count {
+                        parsed?.confidence = segments[segmentIndex].confidence
+                    }
+                    segmentIndex += 1
+                    return parsed
                 }
 
                 return nil
@@ -114,6 +122,7 @@ struct TranscriptLine: Identifiable {
     let timestamp: String?
     let text: String
     let isMe: Bool
+    var confidence: Float?
 }
 
 struct TranscriptLineView: View {
@@ -141,7 +150,7 @@ struct TranscriptLineView: View {
 
             Text(line.text)
                 .font(HlopTypography.body)
-                .foregroundStyle(.primary)
+                .foregroundStyle(line.confidence.map { $0 < 0.5 } == true ? HlopColors.statusWarning : .primary)
                 .padding(.leading, HlopSpacing.sm)
         }
         .padding(.vertical, 3)

@@ -3,6 +3,7 @@ import SwiftUI
 /// Sidebar: record button + session list with status badges
 struct SessionListView: View {
     @Environment(AppViewModel.self) private var vm
+    @Binding var showVocabulary: Bool
     @State private var sessionToDelete: Session?
     @State private var meetingWith: String = ""
 
@@ -138,12 +139,45 @@ struct SessionListView: View {
                 .padding(.bottom, 8)
             }
 
+            // Vocabulary button
+            Button {
+                showVocabulary.toggle()
+                if showVocabulary {
+                    vm.selectedSessionId = nil
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "text.book.closed")
+                        .font(.system(size: 12))
+                    Text("Vocabulary")
+                        .font(.system(size: 12))
+                    Spacer()
+                    if !vm.vocabularyService.terms.isEmpty {
+                        Text("\(vm.vocabularyService.terms.count)")
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+            }
+            .buttonStyle(.plain)
+            .background(showVocabulary ? Color.accentColor.opacity(0.12) : .clear)
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+
             Divider()
 
             // Session list
             List(vm.sessionManager.sessions, selection: Binding(
                 get: { vm.selectedSessionId },
-                set: { id in if let id { vm.selectSession(id) } }
+                set: { id in
+                    if let id {
+                        showVocabulary = false
+                        vm.selectSession(id)
+                    }
+                }
             )) { session in
                 SessionRow(
                     session: session,

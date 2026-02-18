@@ -9,6 +9,7 @@ struct TranscriptSegment: Codable, Identifiable {
     let end: Double       // seconds
     let text: String
     var language: String?
+    var confidence: Float?
 }
 
 /// Complete transcript result - matches existing transcript.json schema
@@ -22,6 +23,8 @@ struct TranscriptResult: Codable {
     let durationSeconds: Double
     let processingTime: Double
     let modelUsed: String
+    var confidence: Float?
+    var rtfx: Float?
 
     enum CodingKeys: String, CodingKey {
         case segments
@@ -33,5 +36,7 @@ struct TranscriptResult: Codable {
         case durationSeconds = "duration_seconds"
         case processingTime = "processing_time"
         case modelUsed = "model_used"
+        case confidence
+        case rtfx
     }
 }
