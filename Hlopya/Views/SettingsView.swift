@@ -8,6 +8,7 @@ struct SettingsView: View {
     @AppStorage("autoProcess") private var autoProcess = true
     @AppStorage("claudeModel") private var claudeModel = "claude-sonnet-4-5-20250929"
     @AppStorage("obsidianVault") private var obsidianVault = "~/Documents/MyBrain"
+    @AppStorage("setupComplete") private var setupComplete = true
 
     var body: some View {
         Form {
@@ -57,6 +58,12 @@ struct SettingsView: View {
             Section("Obsidian") {
                 TextField("Vault Path", text: $obsidianVault)
                     .textFieldStyle(.roundedBorder)
+            }
+
+            Section {
+                Button("Run Setup Wizard Again") {
+                    setupComplete = false
+                }
             }
         }
         .formStyle(.grouped)

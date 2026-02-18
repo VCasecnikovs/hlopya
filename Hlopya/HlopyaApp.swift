@@ -3,6 +3,7 @@ import SwiftUI
 @main
 struct HlopyaApp: App {
     @State private var viewModel = AppViewModel()
+    @AppStorage("setupComplete") private var setupComplete = false
 
     init() {
         // Workaround: suppress re-entrant constraint update assertion crash.
@@ -15,11 +16,16 @@ struct HlopyaApp: App {
     var body: some Scene {
         // Main window
         WindowGroup {
-            ContentView()
-                .environment(viewModel)
-                .frame(minWidth: 700, minHeight: 500)
+            if setupComplete {
+                ContentView()
+                    .environment(viewModel)
+                    .frame(minWidth: 700, minHeight: 500)
+            } else {
+                SetupWizardView()
+                    .environment(viewModel)
+            }
         }
-        .defaultSize(width: 900, height: 650)
+        .defaultSize(width: setupComplete ? 900 : 520, height: setupComplete ? 650 : 560)
         .windowResizability(.contentSize)
 
         // Menu bar

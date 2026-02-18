@@ -19,7 +19,7 @@ final class NoteGenerationService {
         let prompt = buildPrompt(transcript: transcript, meta: meta, personalNotes: personalNotes)
 
         // Find claude CLI
-        let claudePath = findClaudeCLI()
+        let claudePath = Self.findClaudeCLI()
 
         print("[NoteGeneration] Generating notes with claude -p (model: \(model))...")
 
@@ -66,7 +66,7 @@ final class NoteGenerationService {
         return parseResponse(result, transcript: transcript)
     }
 
-    private func findClaudeCLI() -> String {
+    static func findClaudeCLI() -> String {
         let paths = [
             "/usr/local/bin/claude",
             "/opt/homebrew/bin/claude",

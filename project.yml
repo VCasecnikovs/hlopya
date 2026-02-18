@@ -36,3 +36,6 @@ targets:
       - package: Yams
     entitlements:
       path: Hlopya/Hlopya.entitlements
+      properties:
+        com.apple.security.device.audio-input: true
+        com.apple.security.app-sandbox: false
