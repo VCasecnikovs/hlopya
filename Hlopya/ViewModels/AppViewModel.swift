@@ -161,19 +161,26 @@ final class AppViewModel {
                 await configureVocabulary()
             }
 
-            // Transcribe
-            processLog += "Transcribing audio...\n"
+            // Transcribe (skip if already has transcript)
             let sessionDir = Session.recordingsDirectory.appendingPathComponent(sessionId)
-            let transcript = try await transcriptionService.transcribeMeeting(sessionDir: sessionDir)
-            try sessionManager.saveTranscript(transcript, sessionId: sessionId)
-            processLog += "Transcription done: \(transcript.numSegments) segments"
-            if let conf = transcript.confidence {
-                processLog += ", confidence: \(String(format: "%.0f", conf * 100))%"
+            let transcript: TranscriptResult
+            let existingTranscript = sessionManager.loadTranscriptJSON(sessionId: sessionId)
+            if let existing = existingTranscript {
+                transcript = existing
+                processLog += "Using existing transcript (\(transcript.numSegments) segments)\n"
+            } else {
+                processLog += "Transcribing audio...\n"
+                transcript = try await transcriptionService.transcribeMeeting(sessionDir: sessionDir)
+                try sessionManager.saveTranscript(transcript, sessionId: sessionId)
+                processLog += "Transcription done: \(transcript.numSegments) segments"
+                if let conf = transcript.confidence {
+                    processLog += ", confidence: \(String(format: "%.0f", conf * 100))%"
+                }
+                if let rtfx = transcript.rtfx {
+                    processLog += ", speed: \(String(format: "%.1f", rtfx))x"
+                }
+                processLog += "\n"
             }
-            if let rtfx = transcript.rtfx {
-                processLog += ", speed: \(String(format: "%.1f", rtfx))x"
-            }
-            processLog += "\n"
 
             // Generate notes
             processLog += "Generating notes with Claude...\n"

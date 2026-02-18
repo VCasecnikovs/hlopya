@@ -117,6 +117,12 @@ final class SessionManager {
 
     // MARK: - Session Data
 
+    func loadTranscriptJSON(sessionId: String) -> TranscriptResult? {
+        let path = recordingsDir.appendingPathComponent(sessionId).appendingPathComponent("transcript.json")
+        guard let data = try? Data(contentsOf: path) else { return nil }
+        return try? JSONDecoder().decode(TranscriptResult.self, from: data)
+    }
+
     func loadTranscriptMarkdown(sessionId: String) -> String? {
         let path = recordingsDir.appendingPathComponent(sessionId).appendingPathComponent("transcript.md")
         return try? String(contentsOf: path, encoding: .utf8)
