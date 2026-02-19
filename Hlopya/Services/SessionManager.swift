@@ -11,7 +11,72 @@ final class SessionManager {
 
     init() {
         self.recordingsDir = Session.recordingsDirectory
+        migrateMetaIfNeeded()
         loadSessions()
+    }
+
+    /// One-time migration: backfill meta.json with duration/title/participants/status
+    /// from transcript.json and notes.json, so loadSessions() never needs heavy files.
+    private func migrateMetaIfNeeded() {
+        let fm = FileManager.default
+        let marker = recordingsDir.appendingPathComponent(".meta_migrated")
+        guard !fm.fileExists(atPath: marker.path) else { return }
+
+        guard let contents = try? fm.contentsOfDirectory(at: recordingsDir, includingPropertiesForKeys: [.isDirectoryKey]) else { return }
+
+        for url in contents {
+            guard (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else { continue }
+            let dir = url
+
+            var updates: [String: Any] = [:]
+
+            // Read duration from transcript.json if meta doesn't have it
+            let meta = loadMeta(sessionDir: dir)
+            if meta?.duration == nil || meta?.duration == 0 {
+                let transcriptPath = dir.appendingPathComponent("transcript.json")
+                if let data = try? Data(contentsOf: transcriptPath) {
+                    struct LegacyMeta: Decodable {
+                        let durationSeconds: Double
+                        enum CodingKeys: String, CodingKey { case durationSeconds = "duration_seconds" }
+                    }
+                    if let tm = try? JSONDecoder().decode(LegacyMeta.self, from: data) {
+                        updates["duration"] = tm.durationSeconds
+                    }
+                }
+            }
+
+            // Read title/participants from notes.json if meta doesn't have them
+            if meta?.title == nil || meta?.participants == nil {
+                let notesPath = dir.appendingPathComponent("notes.json")
+                if let data = try? Data(contentsOf: notesPath) {
+                    struct LegacyNotes: Decodable {
+                        let title: String?
+                        let participants: [String]?
+                    }
+                    if let nm = try? JSONDecoder().decode(LegacyNotes.self, from: data) {
+                        if meta?.title == nil, let title = nm.title { updates["title"] = title }
+                        if meta?.participants == nil, let p = nm.participants { updates["participants"] = p }
+                    }
+                }
+            }
+
+            // Set status
+            if meta?.status == nil {
+                let hasNotes = fm.fileExists(atPath: dir.appendingPathComponent("notes.json").path)
+                let hasTranscript = fm.fileExists(atPath: dir.appendingPathComponent("transcript.json").path)
+                if hasNotes { updates["status"] = "done" }
+                else if hasTranscript { updates["status"] = "transcribed" }
+                else { updates["status"] = "recorded" }
+            }
+
+            if !updates.isEmpty {
+                saveMeta(sessionDir: dir, updates: updates)
+            }
+        }
+
+        // Mark migration complete
+        fm.createFile(atPath: marker.path, contents: nil)
+        print("[SessionManager] Meta migration complete")
     }
 
     // MARK: - Session Lifecycle
@@ -33,7 +98,9 @@ final class SessionManager {
         return session
     }
 
-    /// Refresh sessions from disk
+    /// Refresh sessions from disk.
+    /// Only reads meta.json (tiny) + fileExists checks per session.
+    /// Heavy files (transcript.json, notes.json) are NOT read here.
     func loadSessions() {
         guard FileManager.default.fileExists(atPath: recordingsDir.path) else {
             sessions = []
@@ -58,61 +125,29 @@ final class SessionManager {
                 let hasNotes = fm.fileExists(atPath: dir.appendingPathComponent("notes.json").path)
                 let hasPersonalNotes = fm.fileExists(atPath: dir.appendingPathComponent("personal_notes.md").path)
 
-                var title: String?
-                var duration: TimeInterval = 0
-                var participants: [String] = []
-                var participantNames: [String: String] = [:]
-
-                // Read meta.json
+                // All session list data comes from meta.json (~100 bytes)
                 let meta = loadMeta(sessionDir: dir)
-                title = meta?.title
-                participantNames = meta?.participantNames ?? [:]
-
-                // Read transcript for duration (lightweight - skips segment decoding)
-                if hasTranscript {
-                    if let data = try? Data(contentsOf: dir.appendingPathComponent("transcript.json")),
-                       let meta = try? JSONDecoder().decode(TranscriptMeta.self, from: data) {
-                        duration = meta.durationSeconds
-                    }
-                }
-
-                // Read notes for title/participants (lightweight)
-                if hasNotes {
-                    if let data = try? Data(contentsOf: dir.appendingPathComponent("notes.json")),
-                       let notesMeta = try? JSONDecoder().decode(NotesMeta.self, from: data) {
-                        if title == nil { title = notesMeta.title }
-                        participants = notesMeta.participants ?? []
-                    }
-                }
 
                 let status: SessionStatus
-                if hasNotes { status = .done }
+                if let s = meta?.status, let parsed = SessionStatus(rawValue: s) {
+                    status = parsed
+                } else if hasNotes { status = .done }
                 else if hasTranscript { status = .transcribed }
                 else { status = .recorded }
 
                 return Session(
-                    id: id, title: title, participants: participants,
-                    participantNames: participantNames, duration: duration,
-                    status: status, hasMic: hasMic, hasSystem: hasSys,
+                    id: id,
+                    title: meta?.title,
+                    participants: meta?.participants ?? [],
+                    participantNames: meta?.participantNames ?? [:],
+                    duration: meta?.duration ?? 0,
+                    status: status,
+                    hasMic: hasMic, hasSystem: hasSys,
                     hasTranscript: hasTranscript, hasNotes: hasNotes,
                     hasPersonalNotes: hasPersonalNotes
                 )
             }
             .sorted { $0.id > $1.id }
-    }
-
-    /// Lightweight struct to extract only metadata from transcript.json without decoding all segments
-    private struct TranscriptMeta: Decodable {
-        let durationSeconds: Double
-        enum CodingKeys: String, CodingKey {
-            case durationSeconds = "duration_seconds"
-        }
-    }
-
-    /// Lightweight struct to extract only title/participants from notes.json
-    private struct NotesMeta: Decodable {
-        let title: String?
-        let participants: [String]?
     }
 
     // MARK: - Session Data
@@ -179,6 +214,12 @@ final class SessionManager {
         md += result.fullText
         try md.write(to: mdPath, atomically: true, encoding: .utf8)
 
+        // Persist duration + status into meta.json for fast session list loading
+        saveMeta(sessionDir: dir, updates: [
+            "duration": result.durationSeconds,
+            "status": "transcribed"
+        ])
+
         // Update session in list
         if let idx = sessions.firstIndex(where: { $0.id == sessionId }) {
             sessions[idx].hasTranscript = true
@@ -197,6 +238,12 @@ final class SessionManager {
         encoder.outputFormatting = [.prettyPrinted, .withoutEscapingSlashes]
         let data = try encoder.encode(notes)
         try data.write(to: path)
+
+        // Persist title + participants + status into meta.json for fast session list loading
+        var metaUpdates: [String: Any] = ["status": "done"]
+        if let title = notes.title { metaUpdates["title"] = title }
+        if let participants = notes.participants { metaUpdates["participants"] = participants }
+        saveMeta(sessionDir: dir, updates: metaUpdates)
 
         // Update session
         if let idx = sessions.firstIndex(where: { $0.id == sessionId }) {

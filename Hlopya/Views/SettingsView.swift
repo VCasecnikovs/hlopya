@@ -37,7 +37,7 @@ struct SettingsView: View {
                             .foregroundStyle(.tertiary)
                     }
                 }
-                Text("Model can be downloaded from the sidebar")
+                Text("Check System page in sidebar for download & health status")
                     .font(HlopTypography.footnote)
                     .foregroundStyle(.tertiary)
             }

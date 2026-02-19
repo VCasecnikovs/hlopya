@@ -122,9 +122,9 @@ struct SessionDetailView: View {
                 }
             }
 
-            // Debug log
-            if !vm.processLog.isEmpty {
-                debugLogBar
+            // Processing timeline
+            if !vm.processingStages.isEmpty {
+                processingTimelineBar
             }
         }
         .onChange(of: vm.selectedSessionId) { _, newId in
@@ -237,9 +237,9 @@ struct SessionDetailView: View {
                 // During recording - no action buttons, just chill
             } else if vm.isProcessing {
                 ProcessingProgress(
-                    stage: vm.processLog.isEmpty
-                        ? "Processing..."
-                        : String(vm.processLog.split(separator: "\n").last ?? "Processing...")
+                    stage: vm.processingStages.first(where: {
+                        if case .active = $0.status { return true }; return false
+                    })?.title ?? "Processing..."
                 )
             } else {
                 if vm.selectedSession?.hasNotes != true {
@@ -363,19 +363,36 @@ struct SessionDetailView: View {
         }
     }
 
-    // MARK: - Debug Log
+    // MARK: - Processing Timeline
 
-    private var debugLogBar: some View {
+    private var processingTimelineBar: some View {
         VStack(spacing: 0) {
             Divider()
-            DisclosureGroup("Processing Log", isExpanded: $showDebugLog) {
-                ScrollView {
-                    Text(vm.processLog)
-                        .font(.system(size: 11, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+            DisclosureGroup("Processing", isExpanded: $showDebugLog) {
+                VStack(alignment: .leading, spacing: 8) {
+                    ProcessingTimeline(stages: vm.processingStages)
+
+                    // Show error message if any
+                    if !vm.processLog.isEmpty {
+                        Text(vm.processLog)
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundStyle(.red.opacity(0.8))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+
+                    // Total time when all done
+                    if !vm.isProcessing, let first = vm.processingStages.first?.startedAt,
+                       let last = vm.processingStages.last?.completedAt {
+                        let total = last.timeIntervalSince(first)
+                        HStack {
+                            Spacer()
+                            Text("Total: \(String(format: "%.1f", total))s")
+                                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                 }
-                .frame(maxHeight: 160)
+                .padding(.top, 4)
             }
             .font(.system(size: 12))
             .foregroundStyle(.secondary)

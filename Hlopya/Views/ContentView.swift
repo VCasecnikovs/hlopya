@@ -10,18 +10,22 @@ import SwiftUI
 struct ContentView: View {
     @Environment(AppViewModel.self) private var vm
     @State private var showVocabulary = false
+    @State private var showSystem = false
 
     var body: some View {
         @Bindable var vm = vm
 
         HStack(spacing: 0) {
-            SessionListView(showVocabulary: $showVocabulary)
+            SessionListView(showVocabulary: $showVocabulary, showSystem: $showSystem)
                 .frame(width: HlopSpacing.sidebarWidth)
 
             Divider()
 
             if showVocabulary {
                 VocabularyView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if showSystem {
+                SystemHealthView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if vm.selectedSessionId != nil {
                 SessionDetailView()

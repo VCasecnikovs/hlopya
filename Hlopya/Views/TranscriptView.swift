@@ -7,6 +7,7 @@ struct TranscriptView: View {
     let participantNames: [String: String]
     var segments: [TranscriptSegment] = []
     @State private var showCopied = false
+    @State private var lines: [TranscriptLine] = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -22,7 +23,7 @@ struct TranscriptView: View {
                 }
                 Spacer()
                 Button {
-                    let plain = parsedLines.map { line in
+                    let plain = lines.map { line in
                         let speaker = line.displaySpeaker ?? ""
                         let ts = line.timestamp ?? ""
                         return "\(speaker) \(ts): \(line.text)"
@@ -44,15 +45,20 @@ struct TranscriptView: View {
             }
             .padding(.bottom, HlopSpacing.md)
 
-            // Transcript lines
-            ForEach(parsedLines) { line in
-                TranscriptLineView(line: line)
+            // Transcript lines - LazyVStack for performance
+            LazyVStack(alignment: .leading, spacing: 0) {
+                ForEach(lines) { line in
+                    TranscriptLineView(line: line)
+                }
             }
         }
         .textSelection(.enabled)
+        .onAppear { lines = parseLines() }
+        .onChange(of: markdown) { _, _ in lines = parseLines() }
+        .onChange(of: segments.count) { _, _ in lines = parseLines() }
     }
 
-    private var parsedLines: [TranscriptLine] {
+    private func parseLines() -> [TranscriptLine] {
         var segmentIndex = 0
         return markdown
             .components(separatedBy: "\n")
@@ -150,10 +156,21 @@ struct TranscriptLineView: View {
 
             Text(line.text)
                 .font(HlopTypography.body)
-                .foregroundStyle(line.confidence.map { $0 < 0.5 } == true ? HlopColors.statusWarning : .primary)
+                .foregroundStyle(isLowConfidence ? HlopColors.statusWarning : .primary)
                 .padding(.leading, HlopSpacing.sm)
+
+            if let conf = line.confidence {
+                Text("\(Int(conf * 100))%")
+                    .font(.system(size: 9, design: .monospaced))
+                    .foregroundStyle(isLowConfidence ? HlopColors.statusWarning : Color.secondary.opacity(0.4))
+                    .padding(.leading, 4)
+            }
         }
         .padding(.vertical, 3)
+    }
+
+    private var isLowConfidence: Bool {
+        line.confidence.map { $0 < 0.5 } == true
     }
 
     /// Convert raw timestamp like "[00:45]" or "[123.4s]" to "0:45" format

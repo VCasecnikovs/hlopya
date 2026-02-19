@@ -207,26 +207,145 @@ struct InlineErrorCard: View {
     }
 }
 
-// MARK: - Processing Progress
+// MARK: - Processing Progress (inline, for action bar)
 
-/// Multi-stage processing progress indicator
+/// Compact inline progress for the action bar
 struct ProcessingProgress: View {
     let stage: String
     var progress: Double?
 
     var body: some View {
-        VStack(spacing: HlopSpacing.sm) {
-            if let progress {
-                ProgressView(value: progress)
-                    .tint(HlopColors.statusProcessing)
-            } else {
-                ProgressView()
-                    .controlSize(.small)
-            }
-
+        HStack(spacing: 6) {
+            ProgressView()
+                .controlSize(.small)
             Text(stage)
                 .font(HlopTypography.footnote)
                 .foregroundStyle(.secondary)
+                .lineLimit(1)
         }
+    }
+}
+
+// MARK: - Processing Timeline
+
+/// Visual pipeline timeline showing each processing step with status, timing, and details.
+struct ProcessingTimeline: View {
+    let stages: [ProcessingStage]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(stages.enumerated()), id: \.element.id) { index, stage in
+                HStack(alignment: .top, spacing: 10) {
+                    // Vertical connector + status icon
+                    VStack(spacing: 0) {
+                        stageIcon(for: stage)
+                            .frame(width: 20, height: 20)
+
+                        if index < stages.count - 1 {
+                            Rectangle()
+                                .fill(connectorColor(for: stage))
+                                .frame(width: 1.5)
+                                .frame(minHeight: 16)
+                        }
+                    }
+
+                    // Content
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 6) {
+                            Image(systemName: stage.icon)
+                                .font(.system(size: 11))
+                                .foregroundStyle(titleColor(for: stage))
+
+                            Text(stage.title)
+                                .font(.system(size: 12, weight: titleWeight(for: stage)))
+                                .foregroundStyle(titleColor(for: stage))
+
+                            Spacer()
+
+                            if let dur = stage.duration {
+                                Text(formatDuration(dur))
+                                    .font(.system(size: 10, design: .monospaced))
+                                    .foregroundStyle(.tertiary)
+                            }
+                        }
+
+                        if let detail = stage.detail {
+                            Text(detail)
+                                .font(.system(size: 11))
+                                .foregroundStyle(detailColor(for: stage))
+                                .lineLimit(2)
+                        }
+                    }
+                    .padding(.bottom, index < stages.count - 1 ? 8 : 0)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func stageIcon(for stage: ProcessingStage) -> some View {
+        switch stage.status {
+        case .completed:
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 14))
+                .foregroundStyle(HlopColors.statusDone)
+        case .active:
+            ProgressView()
+                .controlSize(.mini)
+        case .skipped:
+            Image(systemName: "arrow.right.circle.fill")
+                .font(.system(size: 14))
+                .foregroundStyle(.tertiary)
+        case .failed:
+            Image(systemName: "xmark.circle.fill")
+                .font(.system(size: 14))
+                .foregroundStyle(.red)
+        case .pending:
+            Circle()
+                .stroke(Color.secondary.opacity(0.3), lineWidth: 1.5)
+                .frame(width: 14, height: 14)
+        }
+    }
+
+    private func connectorColor(for stage: ProcessingStage) -> Color {
+        switch stage.status {
+        case .completed, .skipped: return HlopColors.statusDone.opacity(0.4)
+        case .active: return HlopColors.statusProcessing.opacity(0.4)
+        case .failed: return Color.red.opacity(0.4)
+        case .pending: return Color.secondary.opacity(0.15)
+        }
+    }
+
+    private func titleColor(for stage: ProcessingStage) -> Color {
+        switch stage.status {
+        case .completed: return .primary
+        case .active: return HlopColors.statusProcessing
+        case .skipped: return .secondary
+        case .failed: return .red
+        case .pending: return Color.secondary.opacity(0.5)
+        }
+    }
+
+    private func titleWeight(for stage: ProcessingStage) -> Font.Weight {
+        switch stage.status {
+        case .active: return .semibold
+        default: return .medium
+        }
+    }
+
+    private func detailColor(for stage: ProcessingStage) -> Color {
+        switch stage.status {
+        case .failed: return .red.opacity(0.8)
+        case .active: return .secondary
+        default: return Color.secondary.opacity(0.6)
+        }
+    }
+
+    private func formatDuration(_ seconds: TimeInterval) -> String {
+        if seconds < 1 { return "<1s" }
+        if seconds < 60 { return "\(String(format: "%.1f", seconds))s" }
+        let m = Int(seconds) / 60
+        let s = Int(seconds) % 60
+        return "\(m)m \(s)s"
     }
 }

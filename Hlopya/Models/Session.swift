@@ -67,13 +67,20 @@ enum SessionStatus: String, Codable {
     case done
 }
 
-/// Metadata stored in meta.json
+/// Metadata stored in meta.json - enriched by saveTranscript/saveNotes
+/// so that loadSessions() only needs this one file per session.
 struct SessionMeta: Codable {
     var title: String?
     var participantNames: [String: String]?
+    var duration: TimeInterval?
+    var participants: [String]?
+    var status: String?
 
     enum CodingKeys: String, CodingKey {
         case title
         case participantNames = "participant_names"
+        case duration
+        case participants
+        case status
     }
 }

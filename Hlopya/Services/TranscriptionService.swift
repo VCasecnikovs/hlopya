@@ -13,7 +13,9 @@ final class TranscriptionService {
     private var asrManager: AsrManager?
     private var models: AsrModels?
 
-    /// Download and load the Parakeet v3 model (~400MB)
+    /// Download and load the Parakeet v3 model (~400MB).
+    /// Model files are cached on disk after first download, so subsequent loads
+    /// only need CoreML compilation (~2-3s).
     func loadModel() async throws {
         guard !isModelLoaded else { return }
         isDownloading = true
@@ -28,6 +30,15 @@ final class TranscriptionService {
 
         isModelLoaded = true
         print("[TranscriptionService] Parakeet v3 model loaded")
+    }
+
+    /// Release model from memory. Model files remain cached on disk
+    /// for fast reload. Frees ~400MB RAM.
+    func unloadModel() {
+        asrManager = nil
+        models = nil
+        isModelLoaded = false
+        print("[TranscriptionService] Model unloaded from memory")
     }
 
     /// Configure vocabulary boosting with CTC rescoring

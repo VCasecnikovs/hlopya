@@ -18,10 +18,15 @@ final class AppViewModel {
     var isProcessing = false
     var processingSessionId: String?
     var processLog: String = ""
+    var processingStages: [ProcessingStage] = []
     var showSettings = false
     var pendingParticipant: String = ""
     var isVocabConfigured = false
     var isConfiguringVocab = false
+
+    // Model lifecycle
+    private var modelIdleTimer: Task<Void, Never>?
+    private let modelIdleTimeout: TimeInterval = 180 // 3 minutes
 
     // Nub panel
     private var nubPanel: RecordingNubPanel?
@@ -51,16 +56,16 @@ final class AppViewModel {
                 sessionManager.setParticipant(sessionId: session.id, name: pendingParticipant)
                 pendingParticipant = ""
             }
+            // Select session immediately so UI shows the new session
+            selectSession(session.id)
             NSLog("[Hlopya] Starting recording at %@", session.directoryURL.path)
             try await audioCapture.startRecording(sessionDir: session.directoryURL)
-            selectSession(session.id)
             NSLog("[Hlopya] Recording started OK")
             showNub()
         } catch {
             let msg = error.localizedDescription
             NSLog("[Hlopya] Recording FAILED: %@", msg)
             audioCapture.lastError = msg
-            // Clean up the failed session we just created
             if let id = createdSessionId {
                 try? sessionManager.deleteSession(id)
             }
@@ -92,98 +97,164 @@ final class AppViewModel {
 
     // MARK: - Session Selection
 
+    private var loadDetailTask: Task<Void, Never>?
+
     func selectSession(_ id: String) {
         selectedSessionId = id
-        loadSessionDetail(id)
+        // Clear stale data immediately for instant visual feedback
+        detailTranscript = nil
+        detailTranscriptResult = nil
+        detailNotes = nil
+        detailPersonalNotes = ""
+        detailMeta = nil
+        detailTalkTime = [:]
+
+        loadDetailTask?.cancel()
+        loadDetailTask = Task {
+            await loadSessionDetail(id)
+        }
     }
 
-    private func loadSessionDetail(_ id: String) {
-        detailTranscript = sessionManager.loadTranscriptMarkdown(sessionId: id)
-        detailNotes = sessionManager.loadNotes(sessionId: id)
-        detailPersonalNotes = sessionManager.loadPersonalNotes(sessionId: id)
-
+    private func loadSessionDetail(_ id: String) async {
         let dir = Session.recordingsDirectory.appendingPathComponent(id)
-        let metaPath = dir.appendingPathComponent("meta.json")
-        if let data = try? Data(contentsOf: metaPath) {
-            detailMeta = try? JSONDecoder().decode(SessionMeta.self, from: data)
-        } else {
-            detailMeta = nil
-        }
 
-        // Load transcript JSON for talk-time and confidence data
-        let transcriptPath = dir.appendingPathComponent("transcript.json")
-        if let data = try? Data(contentsOf: transcriptPath),
-           let transcript = try? JSONDecoder().decode(TranscriptResult.self, from: data) {
-            detailTranscriptResult = transcript
-            var speakerDurations: [String: Double] = [:]
-            for seg in transcript.segments {
-                let dur = max(seg.end - seg.start, 0)
-                speakerDurations[seg.speaker, default: 0] += dur
+        // Heavy file I/O + JSON decoding off main thread
+        let loaded = await Task.detached { () -> SessionDetailData in
+            let fm = FileManager.default
+            let transcriptMd = try? String(contentsOf: dir.appendingPathComponent("transcript.md"), encoding: .utf8)
+            let personalNotes = (try? String(contentsOf: dir.appendingPathComponent("personal_notes.md"), encoding: .utf8)) ?? ""
+
+            var notes: MeetingNotes?
+            if let data = try? Data(contentsOf: dir.appendingPathComponent("notes.json")) {
+                notes = try? JSONDecoder().decode(MeetingNotes.self, from: data)
             }
-            let total = speakerDurations.values.reduce(0, +)
-            if total > 0 {
-                detailTalkTime = speakerDurations.mapValues { ($0 / total) * 100 }
-            } else {
-                // Fallback: count by text length
-                let meLen = Double(transcript.meText.count)
-                let themLen = Double(transcript.themText.count)
-                let totalLen = meLen + themLen
-                if totalLen > 0 {
-                    detailTalkTime = ["Me": (meLen / totalLen) * 100, "Them": (themLen / totalLen) * 100]
+
+            var meta: SessionMeta?
+            if let data = try? Data(contentsOf: dir.appendingPathComponent("meta.json")) {
+                meta = try? JSONDecoder().decode(SessionMeta.self, from: data)
+            }
+
+            var transcriptResult: TranscriptResult?
+            var talkTime: [String: Double] = [:]
+            if let data = try? Data(contentsOf: dir.appendingPathComponent("transcript.json")),
+               let transcript = try? JSONDecoder().decode(TranscriptResult.self, from: data) {
+                transcriptResult = transcript
+
+                var speakerDurations: [String: Double] = [:]
+                for seg in transcript.segments {
+                    speakerDurations[seg.speaker, default: 0] += max(seg.end - seg.start, 0)
+                }
+                let total = speakerDurations.values.reduce(0, +)
+                if total > 0 {
+                    talkTime = speakerDurations.mapValues { ($0 / total) * 100 }
                 } else {
-                    detailTalkTime = [:]
+                    let meLen = Double(transcript.meText.count)
+                    let themLen = Double(transcript.themText.count)
+                    let totalLen = meLen + themLen
+                    if totalLen > 0 {
+                        talkTime = ["Me": (meLen / totalLen) * 100, "Them": (themLen / totalLen) * 100]
+                    }
                 }
             }
-        } else {
-            detailTranscriptResult = nil
-            detailTalkTime = [:]
-        }
+
+            return SessionDetailData(
+                transcriptMd: transcriptMd,
+                notes: notes,
+                personalNotes: personalNotes,
+                meta: meta,
+                transcriptResult: transcriptResult,
+                talkTime: talkTime
+            )
+        }.value
+
+        // Check we're still showing the same session
+        guard selectedSessionId == id else { return }
+
+        detailTranscript = loaded.transcriptMd
+        detailNotes = loaded.notes
+        detailPersonalNotes = loaded.personalNotes
+        detailMeta = loaded.meta
+        detailTranscriptResult = loaded.transcriptResult
+        detailTalkTime = loaded.talkTime
     }
 
     // MARK: - Processing
 
+    private func updateStage(_ id: String, status: ProcessingStage.Status, detail: String? = nil) {
+        guard let idx = processingStages.firstIndex(where: { $0.id == id }) else { return }
+        processingStages[idx].status = status
+        if let detail { processingStages[idx].detail = detail }
+        if case .active = status { processingStages[idx].startedAt = Date() }
+        if case .completed = status { processingStages[idx].completedAt = Date() }
+        if case .skipped = status { processingStages[idx].completedAt = Date() }
+        if case .failed = status { processingStages[idx].completedAt = Date() }
+    }
+
     func processSession(_ sessionId: String) async {
         isProcessing = true
         processingSessionId = sessionId
-        processLog = "Starting transcription...\n"
+        processLog = ""
+        cancelModelIdleTimer()
+
+        // Build stage list
+        var stages: [ProcessingStage] = []
+        let needsModel = !transcriptionService.isModelLoaded
+        let needsVocab = !vocabularyService.terms.isEmpty && !isVocabConfigured
+        let existingTranscript = sessionManager.loadTranscriptJSON(sessionId: sessionId)
+        let needsTranscription = existingTranscript?.confidence == nil
+
+        if needsModel {
+            stages.append(ProcessingStage(id: "model", title: "Load STT Model", icon: "cpu"))
+        }
+        if needsVocab {
+            stages.append(ProcessingStage(id: "vocab", title: "Configure Vocabulary", icon: "text.book.closed"))
+        }
+        if needsTranscription {
+            stages.append(ProcessingStage(id: "transcribe", title: "Transcribe Audio", icon: "waveform"))
+        } else {
+            stages.append(ProcessingStage(id: "transcribe", title: "Transcribe Audio", icon: "waveform",
+                                          status: .skipped, detail: "Using existing transcript"))
+        }
+        stages.append(ProcessingStage(id: "notes", title: "Generate Notes", icon: "sparkles"))
+        stages.append(ProcessingStage(id: "export", title: "Export to Obsidian", icon: "square.and.arrow.up"))
+        processingStages = stages
 
         do {
-            // Ensure model is loaded
-            if !transcriptionService.isModelLoaded {
-                processLog += "Loading STT model...\n"
+            // Load model
+            if needsModel {
+                updateStage("model", status: .active)
                 try await transcriptionService.loadModel()
-                processLog += "Model loaded.\n"
+                updateStage("model", status: .completed, detail: "Parakeet v3 ready")
             }
 
-            // Configure vocabulary if available
-            if !vocabularyService.terms.isEmpty && !isVocabConfigured {
-                processLog += "Configuring vocabulary (\(vocabularyService.terms.count) terms)...\n"
+            // Vocabulary
+            if needsVocab {
+                updateStage("vocab", status: .active, detail: "\(vocabularyService.terms.count) terms")
                 await configureVocabulary()
+                updateStage("vocab", status: .completed, detail: "\(vocabularyService.terms.count) terms loaded")
             }
 
-            // Transcribe (skip if already has transcript)
+            // Transcribe
             let sessionDir = Session.recordingsDirectory.appendingPathComponent(sessionId)
             let transcript: TranscriptResult
-            let existingTranscript = sessionManager.loadTranscriptJSON(sessionId: sessionId)
-            if let existing = existingTranscript {
+            if let existing = existingTranscript, existing.confidence != nil {
                 transcript = existing
-                processLog += "Using existing transcript (\(transcript.numSegments) segments)\n"
             } else {
-                processLog += "Transcribing audio...\n"
+                updateStage("transcribe", status: .active, detail: "Echo cancellation + ASR...")
                 transcript = try await transcriptionService.transcribeMeeting(sessionDir: sessionDir)
                 try sessionManager.saveTranscript(transcript, sessionId: sessionId)
-                processLog += "Transcription done: \(transcript.numSegments) segments"
+                var detail = "\(transcript.numSegments) segments"
                 if let conf = transcript.confidence {
-                    processLog += ", confidence: \(String(format: "%.0f", conf * 100))%"
+                    detail += ", \(String(format: "%.0f", conf * 100))% confidence"
                 }
                 if let rtfx = transcript.rtfx {
-                    processLog += ", speed: \(String(format: "%.1f", rtfx))x"
+                    detail += ", \(String(format: "%.1f", rtfx))x realtime"
                 }
-                processLog += "\n"
+                updateStage("transcribe", status: .completed, detail: detail)
             }
 
             // Generate notes
-            processLog += "Generating notes with Claude...\n"
+            updateStage("notes", status: .active, detail: "Claude is thinking...")
             let personalNotes = sessionManager.loadPersonalNotes(sessionId: sessionId)
             let notes = try await noteGeneration.generateNotes(
                 transcript: transcript,
@@ -191,50 +262,99 @@ final class AppViewModel {
                 personalNotes: personalNotes.isEmpty ? nil : personalNotes
             )
             try sessionManager.saveNotes(notes, sessionId: sessionId)
-            processLog += "Notes generated.\n"
+            updateStage("notes", status: .completed, detail: notes.title ?? "Notes ready")
 
-            // Export to Obsidian
+            // Export
+            updateStage("export", status: .active)
             let obsidianPath = try obsidianExporter.export(notes: notes, sessionId: sessionId)
-            processLog += "Exported to Obsidian: \(obsidianPath.lastPathComponent)\n"
-
-            processLog += "\nDone!\n"
+            updateStage("export", status: .completed, detail: obsidianPath.lastPathComponent)
         } catch {
-            processLog += "\nError: \(error.localizedDescription)\n"
+            // Mark current active stage as failed
+            if let activeIdx = processingStages.firstIndex(where: {
+                if case .active = $0.status { return true }; return false
+            }) {
+                processingStages[activeIdx].status = .failed(error.localizedDescription)
+                processingStages[activeIdx].completedAt = Date()
+            }
+            processLog = "Error: \(error.localizedDescription)"
         }
 
         isProcessing = false
         processingSessionId = nil
+        startModelIdleTimer()
         sessionManager.loadSessions()
         if let id = selectedSessionId {
-            loadSessionDetail(id)
+            await loadSessionDetail(id)
         }
     }
 
     func transcribeSession(_ sessionId: String) async {
         isProcessing = true
         processingSessionId = sessionId
-        processLog = "Starting transcription...\n"
+        processLog = ""
+        cancelModelIdleTimer()
+
+        var stages: [ProcessingStage] = []
+        if !transcriptionService.isModelLoaded {
+            stages.append(ProcessingStage(id: "model", title: "Load STT Model", icon: "cpu"))
+        }
+        stages.append(ProcessingStage(id: "transcribe", title: "Transcribe Audio", icon: "waveform"))
+        processingStages = stages
 
         do {
             if !transcriptionService.isModelLoaded {
-                processLog += "Loading STT model...\n"
+                updateStage("model", status: .active)
                 try await transcriptionService.loadModel()
+                updateStage("model", status: .completed, detail: "Parakeet v3 ready")
             }
 
+            updateStage("transcribe", status: .active, detail: "Echo cancellation + ASR...")
             let sessionDir = Session.recordingsDirectory.appendingPathComponent(sessionId)
             let transcript = try await transcriptionService.transcribeMeeting(sessionDir: sessionDir)
             try sessionManager.saveTranscript(transcript, sessionId: sessionId)
-            processLog += "Done: \(transcript.numSegments) segments\n"
+            var detail = "\(transcript.numSegments) segments"
+            if let conf = transcript.confidence {
+                detail += ", \(String(format: "%.0f", conf * 100))% confidence"
+            }
+            updateStage("transcribe", status: .completed, detail: detail)
         } catch {
-            processLog += "Error: \(error.localizedDescription)\n"
+            if let activeIdx = processingStages.firstIndex(where: {
+                if case .active = $0.status { return true }; return false
+            }) {
+                processingStages[activeIdx].status = .failed(error.localizedDescription)
+                processingStages[activeIdx].completedAt = Date()
+            }
+            processLog = "Error: \(error.localizedDescription)"
         }
 
         isProcessing = false
         processingSessionId = nil
+        startModelIdleTimer()
         sessionManager.loadSessions()
         if let id = selectedSessionId {
-            loadSessionDetail(id)
+            await loadSessionDetail(id)
         }
+    }
+
+    // MARK: - Model Lifecycle
+
+    /// Start idle timer to unload model after inactivity.
+    /// Resets if already running.
+    private func startModelIdleTimer() {
+        modelIdleTimer?.cancel()
+        modelIdleTimer = Task {
+            try? await Task.sleep(for: .seconds(modelIdleTimeout))
+            guard !Task.isCancelled else { return }
+            guard !isProcessing && !audioCapture.isRecording else { return }
+            transcriptionService.unloadModel()
+            isVocabConfigured = false
+            print("[App] Model unloaded after \(Int(modelIdleTimeout))s idle")
+        }
+    }
+
+    private func cancelModelIdleTimer() {
+        modelIdleTimer?.cancel()
+        modelIdleTimer = nil
     }
 
     // MARK: - Vocabulary
@@ -307,7 +427,7 @@ final class AppViewModel {
     func renameParticipant(oldName: String, newName: String) {
         guard let id = selectedSessionId else { return }
         sessionManager.renameParticipant(sessionId: id, oldName: oldName, newName: newName)
-        loadSessionDetail(id)
+        Task { await loadSessionDetail(id) }
     }
 
     // MARK: - Nub Panel
@@ -327,5 +447,39 @@ final class AppViewModel {
     private func hideNub() {
         nubPanel?.close()
         nubPanel = nil
+    }
+}
+
+/// Data loaded from session files (decoded off main thread)
+private struct SessionDetailData: Sendable {
+    let transcriptMd: String?
+    let notes: MeetingNotes?
+    let personalNotes: String
+    let meta: SessionMeta?
+    let transcriptResult: TranscriptResult?
+    let talkTime: [String: Double]
+}
+
+/// A single step in the processing pipeline
+struct ProcessingStage: Identifiable {
+    let id: String
+    let title: String
+    let icon: String
+    var status: Status = .pending
+    var detail: String?
+    var startedAt: Date?
+    var completedAt: Date?
+
+    var duration: TimeInterval? {
+        guard let start = startedAt, let end = completedAt else { return nil }
+        return end.timeIntervalSince(start)
+    }
+
+    enum Status {
+        case pending
+        case active
+        case completed
+        case skipped
+        case failed(String)
     }
 }

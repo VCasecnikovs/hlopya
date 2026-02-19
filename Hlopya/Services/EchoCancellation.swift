@@ -1,14 +1,16 @@
 import Foundation
 import Accelerate
 
-/// Aggressive energy-gated echo cancellation using Accelerate vDSP.
+/// Echo cancellation for speaker-mode recording.
+///
+/// When using speakers (not headphones), the mic picks up the remote person's voice
+/// from the speakers. This creates duplicate content in both channels.
 ///
 /// Algorithm:
-/// 1. Compute per-frame RMS energy for mic and system channels (20ms frames)
-/// 2. Calculate adaptive system threshold (median * 0.3)
-/// 3. When system audio is active: hard-gate mic to near-zero UNLESS mic is
-///    significantly louder than system (local person talking over remote)
-/// 4. Apply cross-fade at frame boundaries to avoid clicks
+/// 1. Estimate echo delay via cross-correlation peak
+/// 2. Compute echo attenuation factor per frame
+/// 3. Subtract scaled, delayed system signal from mic (spectral subtraction lite)
+/// 4. Apply energy gating for remaining echo
 enum EchoCancellation {
 
     /// Remove speaker bleed from mic audio using system audio as reference.
@@ -18,15 +20,101 @@ enum EchoCancellation {
         sampleRate: Int = 16000
     ) -> [Float] {
         let minLen = min(micSamples.count, systemSamples.count)
-        let mic = Array(micSamples.prefix(minLen))
+        guard minLen > sampleRate else { return Array(micSamples.prefix(minLen)) }
+
+        var mic = Array(micSamples.prefix(minLen))
         let sys = Array(systemSamples.prefix(minLen))
 
-        // 20ms frames (shorter = more precise gating)
+        // Step 1: Estimate echo delay and strength
+        let (delay, echoStrength) = estimateEchoDelay(mic: mic, sys: sys, sampleRate: sampleRate)
+        print("[EchoCancellation] Echo delay: \(delay) samples (\(String(format: "%.1f", Double(delay) / Double(sampleRate) * 1000))ms), strength: \(String(format: "%.3f", echoStrength))")
+
+        // Step 2: Subtract echo if significant
+        if echoStrength > 0.05 {
+            mic = subtractEcho(mic: mic, sys: sys, delay: delay, strength: echoStrength)
+            print("[EchoCancellation] Echo subtracted (factor: \(String(format: "%.2f", echoStrength)))")
+        }
+
+        // Step 3: Energy gating to clean up residual
+        let cleaned = applyEchoGating(mic: mic, sys: sys, sampleRate: sampleRate)
+        return cleaned
+    }
+
+    // MARK: - Echo Delay Estimation
+
+    /// Find the lag at which system audio best correlates with mic audio.
+    /// Returns (delay in samples, correlation strength at that delay).
+    private static func estimateEchoDelay(mic: [Float], sys: [Float], sampleRate: Int) -> (Int, Float) {
+        // Search up to 200ms delay (typical speaker echo range)
+        let maxDelay = sampleRate / 5 // 200ms
+        let chunkSize = min(sampleRate * 5, mic.count) // Use 5 seconds
+        let startOffset = mic.count / 3 // Start from middle
+
+        guard startOffset + chunkSize <= mic.count else { return (0, 0) }
+
+        let micChunk = Array(mic[startOffset..<(startOffset + chunkSize)])
+
+        var bestLag = 0
+        var bestCorr: Float = 0
+
+        // Check correlations at different lags (every 4 samples for speed, ~0.25ms resolution)
+        for lag in stride(from: 0, to: maxDelay, by: 4) {
+            let sysStart = max(0, startOffset - lag)
+            let sysEnd = min(sys.count, sysStart + chunkSize)
+            guard sysEnd - sysStart == chunkSize else { continue }
+
+            let sysChunk = Array(sys[sysStart..<sysEnd])
+
+            // Compute correlation using vDSP
+            var dot: Float = 0
+            var micSq: Float = 0
+            var sysSq: Float = 0
+            vDSP_dotpr(micChunk, 1, sysChunk, 1, &dot, vDSP_Length(chunkSize))
+            vDSP_dotpr(micChunk, 1, micChunk, 1, &micSq, vDSP_Length(chunkSize))
+            vDSP_dotpr(sysChunk, 1, sysChunk, 1, &sysSq, vDSP_Length(chunkSize))
+
+            let denom = sqrt(micSq * sysSq)
+            guard denom > 0 else { continue }
+
+            let corr = abs(dot / denom)
+            if corr > bestCorr {
+                bestCorr = corr
+                bestLag = lag
+            }
+        }
+
+        return (bestLag, bestCorr)
+    }
+
+    // MARK: - Echo Subtraction
+
+    /// Subtract a scaled, delayed copy of system audio from mic.
+    private static func subtractEcho(mic: [Float], sys: [Float], delay: Int, strength: Float) -> [Float] {
+        var result = mic
+
+        // Scale factor: how much system bleeds into mic
+        // Use strength as base, but cap at 0.9 to avoid over-subtraction
+        let scale = min(strength * 1.2, 0.9)
+
+        let count = mic.count
+        for i in 0..<count {
+            let sysIdx = i - delay
+            if sysIdx >= 0 && sysIdx < sys.count {
+                result[i] -= sys[sysIdx] * scale
+            }
+        }
+
+        return result
+    }
+
+    // MARK: - Energy Gating
+
+    private static func applyEchoGating(mic: [Float], sys: [Float], sampleRate: Int) -> [Float] {
         let frameSize = Int(Double(sampleRate) * 0.020)
-        let numFrames = minLen / frameSize
+        let numFrames = mic.count / frameSize
         guard numFrames > 0 else { return mic }
 
-        // Compute per-frame RMS energy using vDSP
+        // Compute per-frame RMS
         var micRMS = [Float](repeating: 0, count: numFrames)
         var sysRMS = [Float](repeating: 0, count: numFrames)
 
@@ -44,54 +132,45 @@ enum EchoCancellation {
             }
         }
 
-        // Adaptive threshold: system "active" when RMS > median * 0.3
+        // Thresholds
         let nonZeroSys = sysRMS.filter { $0 > 0.0005 }
-        let sysMedian: Float
-        if nonZeroSys.isEmpty {
-            sysMedian = 0.001
-        } else {
+        let sysMedian: Float = nonZeroSys.isEmpty ? 0.001 : {
             let sorted = nonZeroSys.sorted()
-            sysMedian = sorted[sorted.count / 2]
-        }
+            return sorted[sorted.count / 2]
+        }()
         let sysThreshold = max(sysMedian * 0.3, 0.002)
 
-        // Also compute mic noise floor for "local speaker is talking" detection
         let nonZeroMic = micRMS.filter { $0 > 0.0005 }
-        let micMedian: Float
-        if nonZeroMic.isEmpty {
-            micMedian = 0.001
-        } else {
+        let micMedian: Float = nonZeroMic.isEmpty ? 0.001 : {
             let sorted = nonZeroMic.sorted()
-            micMedian = sorted[sorted.count / 2]
-        }
+            return sorted[sorted.count / 2]
+        }()
 
-        // Compute per-frame gain
-        // Strategy: when system is active, suppress mic HARD (0.0)
-        // Exception: if mic is significantly louder than what echo would produce,
-        // the local person is actually speaking - let it through
+        // Compute gains - more permissive than before since echo was already subtracted
         var gains = [Float](repeating: 1.0, count: numFrames)
         var suppressedFrames = 0
-
-        // Echo ratio threshold: mic must be this many times louder than system
-        // to be considered "local person talking over echo"
-        let localSpeakerRatio: Float = 2.5
 
         for i in 0..<numFrames {
             guard sysRMS[i] > sysThreshold else { continue }
 
-            // Is the local person also speaking? Only if mic is MUCH louder than system
             let micExcess = micRMS[i] / max(sysRMS[i], 1e-6)
-            if micExcess > localSpeakerRatio && micRMS[i] > micMedian * 2.0 {
-                // Both talking - keep mic but attenuate echo component
-                gains[i] = 0.5
+            // After echo subtraction, mic should mostly have direct voice
+            // Only suppress if mic is very quiet relative to system (pure echo residual)
+            if micExcess > 1.5 && micRMS[i] > micMedian * 1.5 {
+                // User is talking - keep it
+                gains[i] = 1.0
+            } else if micRMS[i] > micMedian * 0.5 {
+                // Some content - partially attenuate
+                gains[i] = 0.4
+                suppressedFrames += 1
             } else {
-                // System only - hard suppress mic (echo)
-                gains[i] = 0.0
+                // Mostly echo residual - suppress
+                gains[i] = 0.05
                 suppressedFrames += 1
             }
         }
 
-        // Smooth gains to avoid clicks (apply 3-frame median filter)
+        // Smooth gains
         var smoothGains = gains
         for i in 1..<(numFrames - 1) {
             var window = [gains[i - 1], gains[i], gains[i + 1]]
@@ -99,9 +178,9 @@ enum EchoCancellation {
             smoothGains[i] = window[1]
         }
 
-        // Apply gains with per-sample cross-fade within frames
+        // Apply gains with cross-fade
         var cleaned = mic
-        let fadeLen = min(frameSize / 4, 80) // ~5ms fade
+        let fadeLen = min(frameSize / 4, 80)
 
         for i in 0..<numFrames {
             let gain = smoothGains[i]
@@ -110,13 +189,11 @@ enum EchoCancellation {
             let start = i * frameSize
             let end = min(start + frameSize, cleaned.count)
 
-            // Apply gain to frame center
             var g = gain
             cleaned.withUnsafeMutableBufferPointer { ptr in
                 vDSP_vsmul(ptr.baseAddress! + start, 1, &g, ptr.baseAddress! + start, 1, vDSP_Length(end - start))
             }
 
-            // Cross-fade at boundaries if neighboring frame has different gain
             if i > 0 && abs(smoothGains[i - 1] - gain) > 0.1 {
                 let prevGain = smoothGains[i - 1]
                 cleaned.withUnsafeMutableBufferPointer { ptr in
@@ -124,11 +201,9 @@ enum EchoCancellation {
                     for s in 0..<min(fadeLen, end - start) {
                         let t = Float(s) / Float(fadeLen)
                         let blendGain = prevGain * (1.0 - t) + gain * t
-                        // Undo the hard gain and reapply blended
                         if gain > 0 {
                             base[s] = (base[s] / gain) * blendGain
                         } else {
-                            // Was zeroed - reconstruct from original mic
                             base[s] = mic[start + s] * blendGain
                         }
                     }
@@ -137,8 +212,7 @@ enum EchoCancellation {
         }
 
         let pct = Float(suppressedFrames) / Float(max(numFrames, 1)) * 100
-        print("[EchoCancellation] \(suppressedFrames)/\(numFrames) frames suppressed (\(String(format: "%.0f", pct))%)")
-        print("[EchoCancellation] Sys threshold: \(String(format: "%.4f", sysThreshold)), mic median: \(String(format: "%.4f", micMedian))")
+        print("[EchoCancellation] \(suppressedFrames)/\(numFrames) frames gated (\(String(format: "%.0f", pct))%)")
 
         return cleaned
     }

@@ -4,9 +4,9 @@ import SwiftUI
 struct SessionListView: View {
     @Environment(AppViewModel.self) private var vm
     @Binding var showVocabulary: Bool
+    @Binding var showSystem: Bool
     @State private var sessionToDelete: Session?
     @State private var meetingWith: String = ""
-    @State private var showModelBanner = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -103,69 +103,58 @@ struct SessionListView: View {
                 .padding(.bottom, 8)
             }
 
-            // STT model download banner (delayed to avoid flash when model loads quickly)
-            if showModelBanner && !vm.transcriptionService.isModelLoaded && !vm.audioCapture.isRecording {
-                HStack(spacing: HlopSpacing.sm) {
-                    Image(systemName: "waveform.badge.arrow.down")
-                        .font(.system(size: 13))
-                        .foregroundStyle(HlopColors.statusSTT)
-
-                    if vm.transcriptionService.isDownloading {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Downloading STT model...")
-                                .font(HlopTypography.footnote)
-                            ProgressView(value: vm.transcriptionService.downloadProgress)
-                                .tint(HlopColors.statusSTT)
-                        }
-                    } else {
-                        Text("STT model needed")
-                            .font(HlopTypography.footnote)
-                            .foregroundStyle(.secondary)
+            // Sidebar nav buttons
+            VStack(spacing: 2) {
+                // Vocabulary button
+                Button {
+                    showVocabulary.toggle()
+                    showSystem = false
+                    if showVocabulary { vm.selectedSessionId = nil }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "text.book.closed")
+                            .font(.system(size: 12))
+                        Text("Vocabulary")
+                            .font(.system(size: 12))
                         Spacer()
-                        Button("Download") {
-                            Task { try? await vm.transcriptionService.loadModel() }
+                        if !vm.vocabularyService.terms.isEmpty {
+                            Text("\(vm.vocabularyService.terms.count)")
+                                .font(.system(size: 10, design: .monospaced))
+                                .foregroundStyle(.tertiary)
                         }
-                        .controlSize(.small)
                     }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
                 }
-                .padding(HlopSpacing.md)
-                .background {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(.ultraThinMaterial)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(HlopColors.statusSTT.opacity(0.15), lineWidth: 0.5)
-                        )
-                }
-                .padding(.horizontal, 14)
-                .padding(.bottom, 8)
-            }
+                .buttonStyle(.plain)
+                .background(showVocabulary ? Color.accentColor.opacity(0.12) : .clear)
+                .clipShape(RoundedRectangle(cornerRadius: 6))
 
-            // Vocabulary button
-            Button {
-                showVocabulary.toggle()
-                if showVocabulary {
-                    vm.selectedSessionId = nil
-                }
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "text.book.closed")
-                        .font(.system(size: 12))
-                    Text("Vocabulary")
-                        .font(.system(size: 12))
-                    Spacer()
-                    if !vm.vocabularyService.terms.isEmpty {
-                        Text("\(vm.vocabularyService.terms.count)")
-                            .font(.system(size: 10, design: .monospaced))
-                            .foregroundStyle(.tertiary)
+                // System health button
+                Button {
+                    showSystem.toggle()
+                    showVocabulary = false
+                    if showSystem { vm.selectedSessionId = nil }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "gearshape")
+                            .font(.system(size: 12))
+                        Text("System")
+                            .font(.system(size: 12))
+                        Spacer()
+                        if !vm.transcriptionService.isModelLoaded {
+                            Circle()
+                                .fill(.orange)
+                                .frame(width: 6, height: 6)
+                        }
                     }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
+                .buttonStyle(.plain)
+                .background(showSystem ? Color.accentColor.opacity(0.12) : .clear)
+                .clipShape(RoundedRectangle(cornerRadius: 6))
             }
-            .buttonStyle(.plain)
-            .background(showVocabulary ? Color.accentColor.opacity(0.12) : .clear)
-            .clipShape(RoundedRectangle(cornerRadius: 6))
             .padding(.horizontal, 10)
             .padding(.vertical, 4)
 
@@ -177,6 +166,7 @@ struct SessionListView: View {
                 set: { id in
                     if let id {
                         showVocabulary = false
+                        showSystem = false
                         vm.selectSession(id)
                     }
                 }
@@ -213,11 +203,6 @@ struct SessionListView: View {
             .listStyle(.sidebar)
         }
         .background(.ultraThinMaterial)
-        .task {
-            // Delay showing "Download STT" banner so it doesn't flash when model loads quickly
-            try? await Task.sleep(for: .seconds(3))
-            showModelBanner = true
-        }
         .alert("Delete Recording?", isPresented: Binding(
             get: { sessionToDelete != nil },
             set: { if !$0 { sessionToDelete = nil } }
@@ -290,7 +275,7 @@ struct SessionRow: View {
     // MARK: - Status Helpers
 
     private var statusLabel: String {
-        if isProcessing { return "..." }
+        if isProcessing { return "STT..." }
         switch session.status {
         case .recording: return "REC"
         case .recorded: return "NEW"
