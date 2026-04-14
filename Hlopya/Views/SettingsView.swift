@@ -7,7 +7,7 @@ struct SettingsView: View {
     @AppStorage("outputDir") private var outputDir = "~/recordings"
     @AppStorage("autoProcess") private var autoProcess = true
     @AppStorage("userName") private var userName = ""
-    @AppStorage("claudeModel") private var claudeModel = "claude-sonnet-4-5-20250929"
+    @AppStorage("claudeModel") private var claudeModel = "sonnet"
     @AppStorage("obsidianVault") private var obsidianVault = "~/Documents/MyBrain"
     @AppStorage("setupComplete") private var setupComplete = false
     @State private var claudeCliPath: String? = nil
@@ -88,9 +88,9 @@ struct SettingsView: View {
                         .foregroundStyle(.orange)
                 }
                 Picker("Claude Model", selection: $claudeModel) {
-                    Text("Sonnet 4.5").tag("claude-sonnet-4-5-20250929")
-                    Text("Opus 4").tag("claude-opus-4-20250514")
-                    Text("Haiku 3.5").tag("claude-3-5-haiku-20241022")
+                    Text("Sonnet 4.6").tag("sonnet")
+                    Text("Opus 4.6").tag("opus")
+                    Text("Haiku 4.5").tag("haiku")
                 }
                 Text("Model used for generating meeting notes and summaries")
                     .font(HlopTypography.footnote)

@@ -4,10 +4,8 @@ import Foundation
 /// Port of noter.py - same prompt template, same JSON schema.
 final class NoteGenerationService {
 
-    let model: String
-
-    init(model: String = "claude-sonnet-4-5-20250929") {
-        self.model = model
+    var model: String {
+        UserDefaults.standard.string(forKey: "claudeModel").flatMap { $0.isEmpty ? nil : $0 } ?? "sonnet"
     }
 
     /// Generate notes from a transcript using `claude -p`
