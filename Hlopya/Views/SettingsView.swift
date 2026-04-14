@@ -9,6 +9,8 @@ struct SettingsView: View {
     @AppStorage("claudeModel") private var claudeModel = "claude-sonnet-4-5-20250929"
     @AppStorage("obsidianVault") private var obsidianVault = "~/Documents/MyBrain"
     @AppStorage("setupComplete") private var setupComplete = false
+    @State private var claudeCliPath: String? = nil
+    @State private var isCheckingClaude = true
 
     var body: some View {
         Form {
@@ -43,6 +45,39 @@ struct SettingsView: View {
             }
 
             Section("Notes") {
+                HStack {
+                    Text("Claude CLI")
+                    Spacer()
+                    if isCheckingClaude {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else if let path = claudeCliPath {
+                        HStack(spacing: HlopSpacing.xs) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(HlopColors.statusDone)
+                            Text(path)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        }
+                    } else {
+                        HStack(spacing: HlopSpacing.xs) {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(.red)
+                            Text("Not found")
+                                .foregroundStyle(.secondary)
+                            Button("Install") {
+                                NSWorkspace.shared.open(URL(string: "https://docs.anthropic.com/en/docs/claude-code/overview")!)
+                            }
+                            .controlSize(.small)
+                        }
+                    }
+                }
+                if claudeCliPath == nil && !isCheckingClaude {
+                    Text("Required for AI note generation. Install Claude Code CLI, then reopen Settings.")
+                        .font(HlopTypography.footnote)
+                        .foregroundStyle(.orange)
+                }
                 Picker("Claude Model", selection: $claudeModel) {
                     Text("Sonnet 4.5").tag("claude-sonnet-4-5-20250929")
                     Text("Opus 4").tag("claude-opus-4-20250514")
@@ -67,5 +102,14 @@ struct SettingsView: View {
         .formStyle(.grouped)
         .frame(width: 450)
         .padding()
+        .task {
+            isCheckingClaude = true
+            let path = await Task.detached {
+                let p = NoteGenerationService.findClaudeCLI()
+                return (p != "claude" && FileManager.default.isExecutableFile(atPath: p)) ? p : nil
+            }.value
+            claudeCliPath = path
+            isCheckingClaude = false
+        }
     }
 }
