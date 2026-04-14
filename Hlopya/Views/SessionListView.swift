@@ -137,7 +137,7 @@ struct SessionListView: View {
                     if showSystem { vm.selectedSessionId = nil }
                 } label: {
                     HStack(spacing: 6) {
-                        Image(systemName: "gearshape")
+                        Image(systemName: "cpu")
                             .font(.system(size: 12))
                         Text("System")
                             .font(.system(size: 12))
@@ -153,6 +153,23 @@ struct SessionListView: View {
                 }
                 .buttonStyle(.plain)
                 .background(showSystem ? Color.accentColor.opacity(0.12) : .clear)
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+
+                // Settings button
+                Button {
+                    NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "gearshape")
+                            .font(.system(size: 12))
+                        Text("Settings")
+                            .font(.system(size: 12))
+                        Spacer()
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                }
+                .buttonStyle(.plain)
                 .clipShape(RoundedRectangle(cornerRadius: 6))
             }
             .padding(.horizontal, 10)
