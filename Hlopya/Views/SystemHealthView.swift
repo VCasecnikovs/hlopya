@@ -47,22 +47,26 @@ struct SystemHealthView: View {
                 .font(.system(size: 15, weight: .semibold))
 
             HStack(spacing: 12) {
-                statusDot(ok: vm.transcriptionService.isModelLoaded)
+                statusDot(ok: vm.transcriptionService.isModelLoaded || vm.transcriptionService.isModelCached)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Parakeet v3 (CoreML)")
                         .font(.system(size: 13, weight: .medium))
 
                     if vm.transcriptionService.isModelLoaded {
-                        Text("Ready")
+                        Text("Loaded in memory")
                             .font(HlopTypography.footnote)
                             .foregroundStyle(.secondary)
                     } else if vm.transcriptionService.isDownloading {
-                        Text("Loading...")
+                        Text("Downloading...")
+                            .font(HlopTypography.footnote)
+                            .foregroundStyle(.secondary)
+                    } else if vm.transcriptionService.isModelCached {
+                        Text("Downloaded, not in memory (loads automatically)")
                             .font(HlopTypography.footnote)
                             .foregroundStyle(.secondary)
                     } else {
-                        Text("Not loaded")
+                        Text("Not downloaded")
                             .font(HlopTypography.footnote)
                             .foregroundStyle(.orange)
                     }

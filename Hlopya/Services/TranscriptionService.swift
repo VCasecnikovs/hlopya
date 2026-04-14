@@ -10,6 +10,10 @@ final class TranscriptionService {
     private(set) var isDownloading = false
     private(set) var downloadProgress: Double = 0
 
+    var isModelCached: Bool {
+        AsrModels.modelsExist(at: AsrModels.defaultCacheDirectory(for: .v3))
+    }
+
     private var asrManager: AsrManager?
     private var models: AsrModels?
 

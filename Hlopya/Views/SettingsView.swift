@@ -40,12 +40,19 @@ struct SettingsView: View {
                         HStack(spacing: HlopSpacing.xs) {
                             Image(systemName: "checkmark.circle.fill")
                                 .foregroundStyle(HlopColors.statusDone)
-                            Text("Parakeet v3 (CoreML)")
+                            Text("Parakeet v3 - loaded")
+                                .foregroundStyle(.secondary)
+                        }
+                    } else if vm.transcriptionService.isModelCached {
+                        HStack(spacing: HlopSpacing.xs) {
+                            Image(systemName: "checkmark.circle")
+                                .foregroundStyle(.secondary)
+                            Text("Parakeet v3 - on disk, not in memory")
                                 .foregroundStyle(.secondary)
                         }
                     } else {
                         Text("Not downloaded")
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(.orange)
                     }
                 }
                 Text("Check System page in sidebar for download & health status")
