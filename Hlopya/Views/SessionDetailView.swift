@@ -225,6 +225,11 @@ struct SessionDetailView: View {
                 if !vm.detailTalkTime.isEmpty {
                     talkTimeBar
                 }
+
+                if let session = vm.selectedSession, session.hasMic && session.hasSystem {
+                    AudioPlayerView(sessionId: session.id)
+                        .padding(.top, 4)
+                }
             }
         }
     }
