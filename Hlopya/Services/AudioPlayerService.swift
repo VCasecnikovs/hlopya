@@ -191,6 +191,13 @@ final class AudioPlayerService {
             }
             result[i] = min(maxVal, 1.0)
         }
+
+        // Normalize to peak so each track fills its vertical space
+        let peak = result.max() ?? 0
+        if peak > 0.001 {
+            for i in 0..<buckets { result[i] /= peak }
+        }
+
         return result
     }
 }
