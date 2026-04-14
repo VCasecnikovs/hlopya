@@ -173,7 +173,7 @@ final class AudioPlayerService {
         file.framePosition = 0
         try? file.read(into: buffer)
 
-        guard let data = buffer.int16ChannelData?[0] else {
+        guard let data = buffer.floatChannelData?[0] else {
             return Array(repeating: 0, count: buckets)
         }
 
@@ -182,14 +182,14 @@ final class AudioPlayerService {
 
         var result = [Float](repeating: 0, count: buckets)
         for i in 0..<buckets {
-            var maxVal: Int16 = 0
+            var maxVal: Float = 0
             let start = i * samplesPerBucket
             let end = min(start + samplesPerBucket, Int(frameCount))
             for j in start..<end {
-                let abs = j < Int(frameCount) ? Swift.abs(data[j]) : 0
-                if abs > maxVal { maxVal = abs }
+                let v = j < Int(frameCount) ? Swift.abs(data[j]) : 0
+                if v > maxVal { maxVal = v }
             }
-            result[i] = Float(maxVal) / Float(Int16.max)
+            result[i] = min(maxVal, 1.0)
         }
         return result
     }

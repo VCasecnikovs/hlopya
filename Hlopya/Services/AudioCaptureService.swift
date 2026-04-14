@@ -102,6 +102,8 @@ final class SystemAudioTap {
     private var converter: AVAudioConverter?
     private var inputFormat: AVAudioFormat?
     private let outputFormat = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: 16000, channels: 1, interleaved: true)!
+    private var pendingSamples: [Float] = []
+    private let minConvertFrames = 4096
 
     init(writer: WAVWriter, targetRate: Int) {
         self.writer = writer
@@ -231,14 +233,12 @@ final class SystemAudioTap {
         NSLog("[SystemAudioTap] Capturing system audio")
     }
 
-    // MARK: - Audio Processing (AVAudioConverter-based)
+    // MARK: - Audio Processing (AVAudioConverter-based with buffering)
 
     private func processAudio(abl: UnsafeMutableAudioBufferListPointer,
                                channels: Int,
                                isFloat: Bool,
                                isNonInterleaved: Bool) {
-        guard let converter, let inputFormat else { return }
-
         // Step 1: Extract mono float samples from the raw buffer
         let frameCount: Int
         let monoFloats: UnsafeMutablePointer<Float>
@@ -271,7 +271,6 @@ final class SystemAudioTap {
                 }
             }
         } else {
-            // Int16 input - convert to float first
             guard let data = abl[0].mData else { return }
             let samples = data.assumingMemoryBound(to: Int16.self)
             let sampleCount = Int(abl[0].mDataByteSize) / MemoryLayout<Int16>.size
@@ -290,17 +289,29 @@ final class SystemAudioTap {
             }
         }
 
-        defer { monoFloats.deallocate() }
+        // Step 2: Accumulate into pending buffer (avoids converter boundary glitches on small chunks)
+        pendingSamples.append(contentsOf: UnsafeBufferPointer(start: monoFloats, count: frameCount))
+        monoFloats.deallocate()
 
-        // Step 2: Wrap mono floats into an AVAudioPCMBuffer
-        guard let inputBuffer = AVAudioPCMBuffer(pcmFormat: inputFormat, frameCapacity: AVAudioFrameCount(frameCount)) else { return }
-        inputBuffer.frameLength = AVAudioFrameCount(frameCount)
+        // Step 3: Only convert when we have enough data
+        guard pendingSamples.count >= minConvertFrames else { return }
+        flushPendingSamples()
+    }
+
+    private func flushPendingSamples() {
+        guard let converter, let inputFormat, !pendingSamples.isEmpty else { return }
+
+        let frames = pendingSamples.count
+        guard let inputBuffer = AVAudioPCMBuffer(pcmFormat: inputFormat, frameCapacity: AVAudioFrameCount(frames)) else { return }
+        inputBuffer.frameLength = AVAudioFrameCount(frames)
         if let ch0 = inputBuffer.floatChannelData?[0] {
-            ch0.update(from: monoFloats, count: frameCount)
+            pendingSamples.withUnsafeBufferPointer { ptr in
+                ch0.update(from: ptr.baseAddress!, count: frames)
+            }
         }
+        pendingSamples.removeAll(keepingCapacity: true)
 
-        // Step 3: Convert using AVAudioConverter (proper anti-aliased resampling)
-        let outFrames = AVAudioFrameCount(Double(frameCount) * Double(targetRate) / inputFormat.sampleRate)
+        let outFrames = AVAudioFrameCount(Double(frames) * Double(targetRate) / inputFormat.sampleRate)
         guard outFrames > 0,
               let outputBuffer = AVAudioPCMBuffer(pcmFormat: converter.outputFormat, frameCapacity: outFrames) else { return }
 
@@ -313,7 +324,6 @@ final class SystemAudioTap {
         }
 
         guard status != .error, let int16Data = outputBuffer.int16ChannelData, outputBuffer.frameLength > 0 else { return }
-
         writer.write(samples: Data(bytes: int16Data[0], count: Int(outputBuffer.frameLength) * 2))
     }
 
@@ -324,6 +334,8 @@ final class SystemAudioTap {
                 AudioDeviceDestroyIOProcID(aggregateDeviceID, procID)
                 deviceProcID = nil
             }
+            // Flush any remaining buffered samples
+            queue.sync { flushPendingSamples() }
             AudioHardwareDestroyAggregateDevice(aggregateDeviceID)
             aggregateDeviceID = kAudioObjectUnknown
         }
@@ -331,6 +343,7 @@ final class SystemAudioTap {
             AudioHardwareDestroyProcessTap(tapID)
             tapID = kAudioObjectUnknown
         }
+        converter = nil
         NSLog("[SystemAudioTap] Stopped and cleaned up")
     }
 
