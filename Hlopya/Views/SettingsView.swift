@@ -24,8 +24,7 @@ struct SettingsView: View {
             }
 
             Section("Recording") {
-                TextField("Output Directory", text: $outputDir)
-                    .textFieldStyle(.roundedBorder)
+                FolderPickerField(label: "Output Directory", path: $outputDir)
                 Toggle("Auto-process after recording", isOn: $autoProcess)
                 Text("Automatically transcribe and generate AI notes when recording stops")
                     .font(HlopTypography.footnote)
@@ -105,8 +104,7 @@ struct SettingsView: View {
             }
 
             Section("Obsidian") {
-                TextField("Vault Path", text: $obsidianVault)
-                    .textFieldStyle(.roundedBorder)
+                FolderPickerField(label: "Vault Path", path: $obsidianVault)
             }
 
             Section {
@@ -126,6 +124,44 @@ struct SettingsView: View {
             }.value
             claudeCliPath = path
             isCheckingClaude = false
+        }
+    }
+}
+
+/// TextField + "Browse..." button that opens a folder picker.
+/// Selected paths are abbreviated to ~/ form when possible.
+struct FolderPickerField: View {
+    let label: String
+    @Binding var path: String
+
+    var body: some View {
+        HStack(spacing: HlopSpacing.xs) {
+            TextField(label, text: $path)
+                .textFieldStyle(.roundedBorder)
+            Button {
+                pickFolder()
+            } label: {
+                Image(systemName: "folder")
+            }
+            .help("Choose folder")
+        }
+    }
+
+    private func pickFolder() {
+        let panel = NSOpenPanel()
+        panel.title = "Choose \(label)"
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.canCreateDirectories = true
+
+        let expanded = (path as NSString).expandingTildeInPath
+        if FileManager.default.fileExists(atPath: expanded) {
+            panel.directoryURL = URL(fileURLWithPath: expanded)
+        }
+
+        if panel.runModal() == .OK, let url = panel.url {
+            path = (url.path as NSString).abbreviatingWithTildeInPath
         }
     }
 }
