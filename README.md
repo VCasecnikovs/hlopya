@@ -131,7 +131,7 @@ Swift 5.9 · SwiftUI · Core Audio · AVFoundation · [FluidAudio](https://githu
 
 [MIT](LICENSE). Use it, fork it, ship it commercially, improve it. PRs welcome.
 
-> 🍵 **One soft ask.** If you're a big company — say, anyone your aunt would recognize, or 1000+ employees — and you want to use Hlopya internally or build on top of it, please [email Vadims](mailto:v@vadi.ms?subject=Hlopya%20chit-chat) and book a 30-minute chit-chat first. No paperwork. No fees. No NDA. Vadims just wants to hear what you're building and say hi.
+> 🍵 **One soft ask.** If you're a big company — say, anyone your aunt would recognize, or 1000+ employees — and you want to use Hlopya internally or build on top of it, please [book a 30-minute chit-chat with Vadims](https://calendar.google.com/calendar/u/0/appointments/schedules/AcZssZ2no_o6SJSomDMzP0kenMwojNtvl7M3iKdB1RqkCr_fZcahAQmKIrboiH3AF9tLGGQjEtZ2glri) first. No paperwork. No fees. No NDA. Vadims just wants to hear what you're building and say hi.
 
 ---
 
