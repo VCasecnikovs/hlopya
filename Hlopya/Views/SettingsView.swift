@@ -38,8 +38,12 @@ struct SettingsView: View {
                     .disabled(showDockIcon && !showMenuBar)
                     .onChange(of: showDockIcon) { _, newValue in
                         NSApp.setActivationPolicy(newValue ? .regular : .accessory)
-                        if newValue {
+                        // After flipping the policy (either direction), macOS
+                        // deactivates the app. Re-raise the Settings window so
+                        // the user doesn't feel like the app disappeared.
+                        DispatchQueue.main.async {
                             NSApp.activate(ignoringOtherApps: true)
+                            NSApp.keyWindow?.makeKeyAndOrderFront(nil)
                         }
                     }
                 Toggle("Show in menu bar", isOn: $showMenuBar)
