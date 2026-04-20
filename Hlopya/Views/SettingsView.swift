@@ -10,6 +10,7 @@ struct SettingsView: View {
     @AppStorage("claudeModel") private var claudeModel = "sonnet"
     @AppStorage("obsidianVault") private var obsidianVault = "~/Documents/MyBrain"
     @AppStorage("setupComplete") private var setupComplete = false
+    @AppStorage("hideDockIcon") private var hideDockIcon = false
     @State private var claudeCliPath: String? = nil
     @State private var isCheckingClaude = true
 
@@ -27,6 +28,19 @@ struct SettingsView: View {
                 FolderPickerField(label: "Output Directory", path: $outputDir)
                 Toggle("Auto-process after recording", isOn: $autoProcess)
                 Text("Automatically transcribe and generate AI notes when recording stops")
+                    .font(HlopTypography.footnote)
+                    .foregroundStyle(.tertiary)
+            }
+
+            Section("Appearance") {
+                Toggle("Hide Dock icon", isOn: $hideDockIcon)
+                    .onChange(of: hideDockIcon) { _, newValue in
+                        NSApp.setActivationPolicy(newValue ? .accessory : .regular)
+                        if !newValue {
+                            NSApp.activate(ignoringOtherApps: true)
+                        }
+                    }
+                Text("Keep Hlopya in the menu bar only. The app stays accessible via the menu bar icon.")
                     .font(HlopTypography.footnote)
                     .foregroundStyle(.tertiary)
             }

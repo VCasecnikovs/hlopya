@@ -4,6 +4,7 @@ import SwiftUI
 struct HlopyaApp: App {
     @State private var viewModel = AppViewModel()
     @AppStorage("setupComplete") private var setupComplete = false
+    @AppStorage("hideDockIcon") private var hideDockIcon = false
 
     init() {
         // Workaround: suppress re-entrant constraint update assertion crash.
@@ -11,6 +12,10 @@ struct HlopyaApp: App {
         // triggers setNeedsUpdateConstraints during a display cycle.
         // See: https://github.com/utmapp/UTM/issues/4691
         UserDefaults.standard.set(false, forKey: "NSWindowAssertWhenDisplayCycleLimitReached")
+
+        if UserDefaults.standard.bool(forKey: "hideDockIcon") {
+            NSApplication.shared.setActivationPolicy(.accessory)
+        }
     }
 
     var body: some Scene {
