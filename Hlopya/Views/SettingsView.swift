@@ -10,7 +10,8 @@ struct SettingsView: View {
     @AppStorage("claudeModel") private var claudeModel = "sonnet"
     @AppStorage("obsidianVault") private var obsidianVault = "~/Documents/MyBrain"
     @AppStorage("setupComplete") private var setupComplete = false
-    @AppStorage("hideDockIcon") private var hideDockIcon = false
+    @AppStorage("showDockIcon") private var showDockIcon = true
+    @AppStorage("showMenuBar") private var showMenuBar = true
     @State private var claudeCliPath: String? = nil
     @State private var isCheckingClaude = true
 
@@ -33,14 +34,17 @@ struct SettingsView: View {
             }
 
             Section("Appearance") {
-                Toggle("Hide Dock icon", isOn: $hideDockIcon)
-                    .onChange(of: hideDockIcon) { _, newValue in
-                        NSApp.setActivationPolicy(newValue ? .accessory : .regular)
-                        if !newValue {
+                Toggle("Show in Dock", isOn: $showDockIcon)
+                    .disabled(showDockIcon && !showMenuBar)
+                    .onChange(of: showDockIcon) { _, newValue in
+                        NSApp.setActivationPolicy(newValue ? .regular : .accessory)
+                        if newValue {
                             NSApp.activate(ignoringOtherApps: true)
                         }
                     }
-                Text("Keep Hlopya in the menu bar only. The app stays accessible via the menu bar icon.")
+                Toggle("Show in menu bar", isOn: $showMenuBar)
+                    .disabled(showMenuBar && !showDockIcon)
+                Text("At least one of Dock or menu bar must stay visible so Hlopya remains accessible.")
                     .font(HlopTypography.footnote)
                     .foregroundStyle(.tertiary)
             }
