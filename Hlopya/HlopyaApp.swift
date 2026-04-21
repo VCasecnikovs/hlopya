@@ -4,6 +4,8 @@ import SwiftUI
 struct HlopyaApp: App {
     @State private var viewModel = AppViewModel()
     @AppStorage("setupComplete") private var setupComplete = false
+    @AppStorage("showDockIcon") private var showDockIcon = true
+    @AppStorage("showMenuBar") private var showMenuBar = true
 
     init() {
         // Workaround: suppress re-entrant constraint update assertion crash.
@@ -11,11 +13,22 @@ struct HlopyaApp: App {
         // triggers setNeedsUpdateConstraints during a display cycle.
         // See: https://github.com/utmapp/UTM/issues/4691
         UserDefaults.standard.set(false, forKey: "NSWindowAssertWhenDisplayCycleLimitReached")
+
+        let defaults = UserDefaults.standard
+        if defaults.object(forKey: "showDockIcon") == nil {
+            defaults.set(true, forKey: "showDockIcon")
+        }
+        if defaults.object(forKey: "showMenuBar") == nil {
+            defaults.set(true, forKey: "showMenuBar")
+        }
+        if !defaults.bool(forKey: "showDockIcon") {
+            NSApplication.shared.setActivationPolicy(.accessory)
+        }
     }
 
     var body: some Scene {
         // Main window
-        WindowGroup {
+        WindowGroup(id: "main") {
             if setupComplete {
                 ContentView()
                     .environment(viewModel)
@@ -36,7 +49,24 @@ struct HlopyaApp: App {
         }
 
         // Menu bar
-        MenuBarExtra("Hlopya", systemImage: "mic.circle.fill") {
+        MenuBarExtra("Hlopya", systemImage: "mic.circle.fill", isInserted: $showMenuBar) {
+            MenuBarContent(viewModel: viewModel)
+        }
+
+        // Settings
+        Settings {
+            SettingsView()
+                .environment(viewModel)
+        }
+    }
+}
+
+private struct MenuBarContent: View {
+    let viewModel: AppViewModel
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        Group {
             if viewModel.audioCapture.isRecording {
                 Text("Recording: \(viewModel.audioCapture.formattedTime)")
                     .font(.caption)
@@ -53,8 +83,9 @@ struct HlopyaApp: App {
             }
             Divider()
             Button("Show Window") {
+                openWindow(id: "main")
                 NSApp.activate(ignoringOtherApps: true)
-                if let window = NSApp.windows.first(where: { !($0 is NSPanel) }) {
+                if let window = NSApp.windows.first(where: { !($0 is NSPanel) && $0.canBecomeKey }) {
                     window.makeKeyAndOrderFront(nil)
                 }
             }
@@ -71,12 +102,6 @@ struct HlopyaApp: App {
                 }
             }
             .keyboardShortcut("q", modifiers: .command)
-        }
-
-        // Settings
-        Settings {
-            SettingsView()
-                .environment(viewModel)
         }
     }
 }
