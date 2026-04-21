@@ -26,5 +26,15 @@
 	<string>Hlopya needs system audio access to record meeting participants.</string>
 	<key>LSUIElement</key>
 	<false/>
+	<key>SUFeedURL</key>
+	<string>https://raw.githubusercontent.com/VCasecnikovs/hlopya/main/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>S6c4sLvkTCd4Et+fB1VbenN2uYleFj04RHCUv/MzhIY=</string>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUScheduledCheckInterval</key>
+	<integer>86400</integer>
+	<key>SUAllowsAutomaticUpdates</key>
+	<true/>
 </dict>
 </plist>

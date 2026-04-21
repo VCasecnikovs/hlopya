@@ -3,6 +3,7 @@ import SwiftUI
 @main
 struct HlopyaApp: App {
     @State private var viewModel = AppViewModel()
+    @StateObject private var updater = UpdaterService()
     @AppStorage("setupComplete") private var setupComplete = false
     @AppStorage("showDockIcon") private var showDockIcon = true
     @AppStorage("showMenuBar") private var showMenuBar = true
@@ -46,11 +47,17 @@ struct HlopyaApp: App {
                 }
                 .keyboardShortcut("r", modifiers: .command)
             }
+            CommandGroup(after: .appInfo) {
+                Button("Check for Updates…") {
+                    updater.checkForUpdates()
+                }
+                .disabled(!updater.canCheckForUpdates)
+            }
         }
 
         // Menu bar
         MenuBarExtra("Hlopya", systemImage: "mic.circle.fill", isInserted: $showMenuBar) {
-            MenuBarContent(viewModel: viewModel)
+            MenuBarContent(viewModel: viewModel, updater: updater)
         }
 
         // Settings
@@ -63,6 +70,7 @@ struct HlopyaApp: App {
 
 private struct MenuBarContent: View {
     let viewModel: AppViewModel
+    @ObservedObject var updater: UpdaterService
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
@@ -90,6 +98,11 @@ private struct MenuBarContent: View {
                 }
             }
             .keyboardShortcut("o", modifiers: .command)
+            Divider()
+            Button("Check for Updates…") {
+                updater.checkForUpdates()
+            }
+            .disabled(!updater.canCheckForUpdates)
             Divider()
             Button("Quit") {
                 if viewModel.audioCapture.isRecording {

@@ -3,7 +3,13 @@ BUILD_DIR = .build/xcode
 INSTALL_DIR = /Applications
 ENTITLEMENTS = Hlopya/Hlopya.entitlements
 
-.PHONY: build install clean run debug fix-entitlements release sign-notarize
+# Fail loudly: without pipefail, `xcodebuild ... | tail -5` hides BUILD FAILED
+# behind a zero exit code, which is how forkers ended up with silently broken
+# installs. Also error on unset vars so `make install VERSION=` can't sneak by.
+SHELL := /bin/bash
+.SHELLFLAGS := -eu -o pipefail -c
+
+.PHONY: build install clean run debug fix-entitlements release sign-notarize sparkle-setup
 
 fix-entitlements:
 	@printf '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0">\n<dict>\n\t<key>com.apple.security.device.audio-input</key>\n\t<true/>\n\t<key>com.apple.security.app-sandbox</key>\n\t<false/>\n\t<key>com.apple.security.get-task-allow</key>\n\t<false/>\n</dict>\n</plist>\n' > $(ENTITLEMENTS)
@@ -18,6 +24,8 @@ build: fix-entitlements
 		-configuration Release \
 		-derivedDataPath $(BUILD_DIR) \
 		build 2>&1 | tail -5
+	@test -d "$(BUILD_DIR)/Build/Products/Release/$(APP_NAME).app" || \
+		{ echo "ERROR: build produced no .app - rerun without '| tail' to see xcodebuild output"; exit 1; }
 	@echo ""
 	@echo "Built: $(BUILD_DIR)/Build/Products/Release/$(APP_NAME).app"
 
@@ -29,6 +37,8 @@ debug:
 		-configuration Debug \
 		-derivedDataPath $(BUILD_DIR) \
 		build 2>&1 | tail -5
+	@test -d "$(BUILD_DIR)/Build/Products/Debug/$(APP_NAME).app" || \
+		{ echo "ERROR: debug build produced no .app"; exit 1; }
 
 install: build
 	@echo "Installing to $(INSTALL_DIR)/$(APP_NAME).app..."
@@ -43,7 +53,8 @@ clean:
 	@rm -rf $(BUILD_DIR) $(APP_NAME).xcodeproj
 	@echo "Cleaned."
 
-# Full local release: bump → commit → tag → push → sign → notarize → staple → upload.
+# Full local release: bump → commit → tag → push → sign → notarize → staple →
+# Sparkle sign + appcast → upload.
 # CI is disabled (billing locked on VCasecnikovs account) - everything runs locally.
 release:
 ifndef VERSION
@@ -57,10 +68,35 @@ endif
 	@git tag "v$(VERSION)"
 	@git push origin main --tags
 	@$(MAKE) sign-notarize
+	@echo "==> Signing update for Sparkle..."
+	@ZIP="$(BUILD_DIR)/Build/Products/Release/$(APP_NAME).zip"; \
+		SIGN_UPDATE="$$(find $(BUILD_DIR)/SourcePackages/artifacts -name sign_update -type f 2>/dev/null | grep -v old_dsa | head -1)"; \
+		if [ -z "$$SIGN_UPDATE" ]; then echo "ERROR: sign_update not found in SPM artifacts"; exit 1; fi; \
+		SIGDATA="$$($$SIGN_UPDATE $$ZIP)"; \
+		SIG="$$(echo "$$SIGDATA" | sed -n 's/.*sparkle:edSignature="\([^"]*\)".*/\1/p')"; \
+		LEN="$$(echo "$$SIGDATA" | sed -n 's/.*length="\([^"]*\)".*/\1/p')"; \
+		if [ -z "$$SIG" ] || [ -z "$$LEN" ]; then echo "ERROR: sign_update output unparseable: $$SIGDATA"; exit 1; fi; \
+		echo "    signature: $$SIG"; \
+		echo "    length:    $$LEN"; \
+		python3 scripts/update-appcast.py \
+			--version "$(VERSION)" \
+			--build 1 \
+			--zip "$$ZIP" \
+			--signature "$$SIG" \
+			--length "$$LEN"
+	@echo "==> Committing appcast.xml..."
+	@git add appcast.xml
+	@git commit -m "appcast: v$(VERSION)"
+	@git push origin main
 	@echo "==> Uploading to GitHub release..."
-	@gh release create "v$(VERSION)" "$(BUILD_DIR)/Build/Products/Release/Hlopya.zip" \
+	@gh release create "v$(VERSION)" "$(BUILD_DIR)/Build/Products/Release/$(APP_NAME).zip" \
 		--title "v$(VERSION)" --generate-notes
 	@echo "==> Done: https://github.com/VCasecnikovs/hlopya/releases/tag/v$(VERSION)"
+
+# One-time: generate Sparkle EdDSA keypair (stored in login keychain) and
+# print the public key for Info.plist.
+sparkle-setup:
+	@bash scripts/sparkle-setup.sh
 
 # Build with Developer ID + hardened runtime, notarize via Apple, staple ticket.
 # Requires keychain profile 'hlopya-notary' (set up once with notarytool store-credentials).
