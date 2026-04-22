@@ -72,7 +72,9 @@ endif
 	@ZIP="$(BUILD_DIR)/Build/Products/Release/$(APP_NAME).zip"; \
 		SIGN_UPDATE="$$(find $(BUILD_DIR)/SourcePackages/artifacts -name sign_update -type f 2>/dev/null | grep -v old_dsa | head -1)"; \
 		if [ -z "$$SIGN_UPDATE" ]; then echo "ERROR: sign_update not found in SPM artifacts"; exit 1; fi; \
-		SIGDATA="$$($$SIGN_UPDATE $$ZIP)"; \
+		KEYFILE="$$HOME/.config/hlopya/sparkle-ed25519.key"; \
+		if [ ! -s "$$KEYFILE" ]; then echo "ERROR: Sparkle private key missing at $$KEYFILE. Run: security find-generic-password -a ed25519 -s https://sparkle-project.org -w > $$KEYFILE && chmod 600 $$KEYFILE"; exit 1; fi; \
+		SIGDATA="$$($$SIGN_UPDATE -f $$KEYFILE $$ZIP)"; \
 		SIG="$$(echo "$$SIGDATA" | sed -n 's/.*sparkle:edSignature="\([^"]*\)".*/\1/p')"; \
 		LEN="$$(echo "$$SIGDATA" | sed -n 's/.*length="\([^"]*\)".*/\1/p')"; \
 		if [ -z "$$SIG" ] || [ -z "$$LEN" ]; then echo "ERROR: sign_update output unparseable: $$SIGDATA"; exit 1; fi; \
@@ -116,6 +118,22 @@ sign-notarize: fix-entitlements
 		CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO \
 		CODE_SIGN_ENTITLEMENTS=$(ENTITLEMENTS) \
 		build 2>&1 | tail -5
+	@echo "==> Re-signing Sparkle nested helpers with Developer ID..."
+	@IDENTITY="Developer ID Application: Maksimilians Maksimovs (3S29L64542)"; \
+		APP="$(BUILD_DIR)/Build/Products/Release/$(APP_NAME).app"; \
+		SPARKLE="$$APP/Contents/Frameworks/Sparkle.framework/Versions/B"; \
+		codesign --force --sign "$$IDENTITY" --options runtime --timestamp \
+			"$$SPARKLE/XPCServices/Downloader.xpc"; \
+		codesign --force --sign "$$IDENTITY" --options runtime --timestamp \
+			"$$SPARKLE/XPCServices/Installer.xpc"; \
+		codesign --force --sign "$$IDENTITY" --options runtime --timestamp \
+			"$$SPARKLE/Autoupdate"; \
+		codesign --force --sign "$$IDENTITY" --options runtime --timestamp \
+			"$$SPARKLE/Updater.app"; \
+		codesign --force --sign "$$IDENTITY" --options runtime --timestamp \
+			"$$APP/Contents/Frameworks/Sparkle.framework"; \
+		codesign --force --sign "$$IDENTITY" --options runtime --timestamp \
+			--entitlements $(ENTITLEMENTS) "$$APP"
 	@cd $(BUILD_DIR)/Build/Products/Release && \
 		ditto -c -k --keepParent $(APP_NAME).app $(APP_NAME).zip && \
 		echo "==> Submitting to Apple notarytool (3-10 min)..." && \
