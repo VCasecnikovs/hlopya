@@ -9,7 +9,7 @@ ENTITLEMENTS = Hlopya/Hlopya.entitlements
 SHELL := /bin/bash
 .SHELLFLAGS := -eu -o pipefail -c
 
-.PHONY: build install clean run debug fix-entitlements release sign-notarize sparkle-setup
+.PHONY: build build-watch install clean run debug fix-entitlements release sign-notarize sparkle-setup
 
 fix-entitlements:
 	@printf '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0">\n<dict>\n\t<key>com.apple.security.device.audio-input</key>\n\t<true/>\n\t<key>com.apple.security.app-sandbox</key>\n\t<false/>\n\t<key>com.apple.security.get-task-allow</key>\n\t<false/>\n</dict>\n</plist>\n' > $(ENTITLEMENTS)
@@ -39,6 +39,16 @@ debug:
 		build 2>&1 | tail -5
 	@test -d "$(BUILD_DIR)/Build/Products/Debug/$(APP_NAME).app" || \
 		{ echo "ERROR: debug build produced no .app"; exit 1; }
+
+build-watch:
+	@xcodegen generate 2>/dev/null || true
+	@echo "Typechecking HlopyaWatch sources..."
+	@SDK="$$(xcrun --sdk watchos --show-sdk-path)"; \
+		xcrun --sdk watchos swiftc \
+			-target arm64-apple-watchos10.0 \
+			-sdk "$$SDK" \
+			-typecheck HlopyaWatch/*.swift
+	@echo "Watch sources typecheck. Build/install from Xcode with your Apple Watch signing team."
 
 install: build
 	@echo "Installing to $(INSTALL_DIR)/$(APP_NAME).app..."
