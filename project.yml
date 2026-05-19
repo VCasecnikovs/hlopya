@@ -50,7 +50,7 @@ targets:
         com.apple.security.get-task-allow: false
 
   HlopyaWatch:
-    type: application.watchapp2
+    type: application
     platform: watchOS
     sources: HlopyaWatch
     settings:
