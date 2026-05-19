@@ -28,6 +28,7 @@ final class KlavaUploader {
         do {
             var request = URLRequest(url: endpoint)
             request.httpMethod = "POST"
+            request.timeoutInterval = 20
             if !token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
             }

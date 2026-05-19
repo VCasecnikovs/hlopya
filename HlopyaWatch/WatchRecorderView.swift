@@ -1,9 +1,11 @@
 import SwiftUI
 
 struct WatchRecorderView: View {
+    private static let defaultServerURL = "http://192.168.1.207:18788/api/hlopya/watch/upload"
+
     @State private var recorder = WatchRecorder()
     @State private var uploader = KlavaUploader()
-    @AppStorage("serverURL") private var serverURL = "http://YOUR-MAC.local:18788/api/hlopya/watch/upload"
+    @AppStorage("serverURL") private var serverURL = Self.defaultServerURL
     @AppStorage("webhookToken") private var webhookToken = ""
     @AppStorage("recordingTitle") private var recordingTitle = "Watch Recording"
 
@@ -64,6 +66,11 @@ struct WatchRecorderView: View {
                 .padding(.vertical, 8)
             }
             .navigationTitle("Hlopya")
+            .onAppear {
+                if serverURL.contains("YOUR-MAC") || serverURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    serverURL = Self.defaultServerURL
+                }
+            }
         }
     }
 }
