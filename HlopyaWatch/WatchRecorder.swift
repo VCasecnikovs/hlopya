@@ -2,6 +2,13 @@ import AVFoundation
 import Foundation
 import Observation
 
+struct WatchRecording: Identifiable {
+    let url: URL
+    let createdAt: Date
+
+    var id: String { url.lastPathComponent }
+}
+
 @MainActor
 @Observable
 final class WatchRecorder {
@@ -92,6 +99,22 @@ final class WatchRecorder {
             .appendingPathComponent("Recordings", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
+    }
+
+    static func recordings() -> [WatchRecording] {
+        let urls = (try? FileManager.default.contentsOfDirectory(
+            at: recordingsDirectory(),
+            includingPropertiesForKeys: [.creationDateKey],
+            options: [.skipsHiddenFiles]
+        )) ?? []
+
+        return urls
+            .filter { $0.pathExtension.lowercased() == "m4a" }
+            .map { url in
+                let values = try? url.resourceValues(forKeys: [.creationDateKey])
+                return WatchRecording(url: url, createdAt: values?.creationDate ?? .distantPast)
+            }
+            .sorted { $0.createdAt < $1.createdAt }
     }
 
     private static func fileName(for date: Date) -> String {

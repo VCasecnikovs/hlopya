@@ -18,7 +18,10 @@ struct WatchRecorderView: View {
                         .contentTransition(.numericText())
 
                     Button {
-                        Task { await recorder.toggle() }
+                        Task {
+                            await recorder.toggle()
+                            uploader.refreshPendingCount()
+                        }
                     } label: {
                         Image(systemName: recorder.isRecording ? "stop.fill" : "record.circle.fill")
                             .font(.system(size: 38))
@@ -27,21 +30,22 @@ struct WatchRecorderView: View {
                     .buttonStyle(.borderedProminent)
                     .tint(recorder.isRecording ? .red : .blue)
 
-                    if let currentURL = recorder.currentURL, !recorder.isRecording {
+                    if !recorder.isRecording {
                         Button {
                             Task {
-                                await uploader.upload(
-                                    fileURL: currentURL,
+                                await uploader.syncPending(
                                     serverURL: serverURL,
                                     token: webhookToken,
-                                    title: recordingTitle,
-                                    recordedAt: recorder.startedAt
+                                    title: recordingTitle
                                 )
                             }
                         } label: {
-                            Label(uploader.isUploading ? "Sending" : "Send", systemImage: "arrow.up.circle")
+                            Label(
+                                uploader.isUploading ? "Syncing" : "Sync \(uploader.pendingCount)",
+                                systemImage: "arrow.triangle.2.circlepath"
+                            )
                         }
-                        .disabled(uploader.isUploading)
+                        .disabled(uploader.isUploading || uploader.pendingCount == 0)
                     }
 
                     TextField("Title", text: $recordingTitle)
@@ -70,6 +74,7 @@ struct WatchRecorderView: View {
                 if serverURL.contains("YOUR-MAC") || serverURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     serverURL = Self.defaultServerURL
                 }
+                uploader.refreshPendingCount()
             }
         }
     }
