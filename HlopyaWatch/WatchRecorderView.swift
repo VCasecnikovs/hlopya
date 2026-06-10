@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct WatchRecorderView: View {
-    private static let defaultServerURL = "http://192.168.1.207:18788/api/hlopya/watch/upload"
+    private static let defaultServerURL = "http://100.82.35.56:18788/api/hlopya/watch/upload"
 
     @State private var recorder = WatchRecorder()
     @State private var uploader = KlavaUploader()
@@ -80,7 +80,9 @@ struct WatchRecorderView: View {
             }
             .navigationTitle("Hlopya")
             .onAppear {
-                if serverURL.contains("YOUR-MAC") || serverURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                if serverURL.contains("YOUR-MAC")
+                    || serverURL.contains("192.168.1.207")
+                    || serverURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     serverURL = Self.defaultServerURL
                 }
                 uploader.refreshPendingCount()
