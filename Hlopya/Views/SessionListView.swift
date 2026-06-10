@@ -279,6 +279,10 @@ struct SessionRow: View {
 
                 Spacer()
 
+                if session.source == "apple-watch" {
+                    GlassBadge(text: "Watch", color: .blue)
+                }
+
                 GlassBadge(text: statusLabel, color: statusColor)
             }
         }

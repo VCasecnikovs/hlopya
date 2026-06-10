@@ -9,6 +9,7 @@ import SwiftUI
 ///   ⌘1 / ⌘2 - Switch detail tabs (requires SessionDetailView refactor)
 struct ContentView: View {
     @Environment(AppViewModel.self) private var vm
+    @Environment(\.scenePhase) private var scenePhase
     @State private var showVocabulary = false
     @State private var showSystem = false
 
@@ -52,6 +53,10 @@ struct ContentView: View {
         }
         .task {
             await vm.resumeUnprocessedSessions()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            vm.sessionManager.loadSessions()
         }
         .background(.ultraThinMaterial)
         .frame(minWidth: 800, minHeight: 500)

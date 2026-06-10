@@ -7,6 +7,7 @@ struct Session: Identifiable, Codable, Hashable {
     var title: String?
     var participants: [String]
     var participantNames: [String: String]  // "Me" -> "Vadim", "Them" -> "Alex"
+    var source: String?
     var duration: TimeInterval
     var status: SessionStatus
 
@@ -75,6 +76,7 @@ struct SessionMeta: Codable {
     var meetingWith: String?
     var duration: TimeInterval?
     var participants: [String]?
+    var source: String?
     var status: String?
 
     enum CodingKeys: String, CodingKey {
@@ -83,6 +85,7 @@ struct SessionMeta: Codable {
         case meetingWith = "meeting_with"
         case duration
         case participants
+        case source
         case status
     }
 }

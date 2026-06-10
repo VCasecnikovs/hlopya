@@ -88,7 +88,7 @@ final class SessionManager {
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
 
         let session = Session(
-            id: id, title: nil, participants: [], participantNames: [:],
+            id: id, title: nil, participants: [], participantNames: [:], source: "mac",
             duration: 0, status: .recording,
             hasMic: false, hasSystem: false,
             hasTranscript: false, hasNotes: false, hasPersonalNotes: false
@@ -140,6 +140,7 @@ final class SessionManager {
                     title: meta?.title,
                     participants: meta?.participants ?? [],
                     participantNames: meta?.participantNames ?? [:],
+                    source: meta?.source,
                     duration: meta?.duration ?? 0,
                     status: status,
                     hasMic: hasMic, hasSystem: hasSys,
