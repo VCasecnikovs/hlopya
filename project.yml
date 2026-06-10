@@ -64,6 +64,6 @@ targets:
         SDKROOT: watchos
         SUPPORTED_PLATFORMS: "watchos watchsimulator"
         TARGETED_DEVICE_FAMILY: 4
-        CODE_SIGN_STYLE: Manual
-        CODE_SIGN_IDENTITY: "-"
-        DEVELOPMENT_TEAM: ""
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: Apple Development
+        DEVELOPMENT_TEAM: 98G3PXUVPU
