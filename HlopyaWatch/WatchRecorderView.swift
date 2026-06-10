@@ -19,8 +19,17 @@ struct WatchRecorderView: View {
 
                     Button {
                         Task {
+                            let wasRecording = recorder.isRecording
                             await recorder.toggle()
                             uploader.refreshPendingCount()
+
+                            if wasRecording {
+                                await uploader.syncPending(
+                                    serverURL: serverURL,
+                                    token: webhookToken,
+                                    title: recordingTitle
+                                )
+                            }
                         }
                     } label: {
                         Image(systemName: recorder.isRecording ? "stop.fill" : "record.circle.fill")
