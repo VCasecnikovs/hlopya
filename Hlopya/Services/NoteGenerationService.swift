@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 /// Generates structured meeting notes using Claude CLI.
@@ -35,9 +36,16 @@ final class NoteGenerationService {
 
         // Fix environment for GUI-launched app:
         // - Remove CLAUDECODE to avoid nested session error
+        // - Remove local proxy override; stale proxy settings can make claude -p hang indefinitely
         // - Ensure PATH includes Homebrew/local dirs so `env node` shebang works
         var env = ProcessInfo.processInfo.environment
         env.removeValue(forKey: "CLAUDECODE")
+        env.removeValue(forKey: "ANTHROPIC_BASE_URL")
+        let klavaClaudeConfig = "\(FileManager.default.homeDirectoryForCurrentUser.path)/Documents/GitHub/claude/.claude"
+        if env["CLAUDE_CONFIG_DIR"] == nil,
+           FileManager.default.fileExists(atPath: "\(klavaClaudeConfig)/.claude.json") {
+            env["CLAUDE_CONFIG_DIR"] = klavaClaudeConfig
+        }
         let extraPaths = ["/opt/homebrew/bin", "/usr/local/bin",
                           "\(FileManager.default.homeDirectoryForCurrentUser.path)/.local/bin"]
         let currentPath = env["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin"
@@ -63,17 +71,49 @@ final class NoteGenerationService {
 
         // Wait with timeout
         let result = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<String, Error>) in
+            let timeoutSeconds: TimeInterval = 300
+            let lock = NSLock()
+            var didResume = false
+
+            func resumeOnce(_ result: Result<String, Error>) {
+                lock.lock()
+                defer { lock.unlock() }
+                guard !didResume else { return }
+                didResume = true
+                switch result {
+                case .success(let text):
+                    continuation.resume(returning: text)
+                case .failure(let error):
+                    continuation.resume(throwing: error)
+                }
+            }
+
+            let timeout = DispatchWorkItem {
+                if process.isRunning {
+                    process.terminate()
+                    DispatchQueue.global().asyncAfter(deadline: .now() + 2) {
+                        if process.isRunning {
+                            kill(process.processIdentifier, SIGKILL)
+                        }
+                    }
+                }
+                resumeOnce(.failure(NoteGenerationError.claudeTimedOut(Int(timeoutSeconds))))
+            }
+
+            DispatchQueue.global().asyncAfter(deadline: .now() + timeoutSeconds, execute: timeout)
+
             DispatchQueue.global().async {
                 process.waitUntilExit()
+                timeout.cancel()
 
                 if process.terminationStatus != 0 {
                     let stderr = String(data: errorPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-                    continuation.resume(throwing: NoteGenerationError.claudeFailed(Int(process.terminationStatus), stderr))
+                    resumeOnce(.failure(NoteGenerationError.claudeFailed(Int(process.terminationStatus), stderr)))
                     return
                 }
 
                 let stdout = String(data: outputPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-                continuation.resume(returning: stdout)
+                resumeOnce(.success(stdout))
             }
         }
 
@@ -284,6 +324,7 @@ final class NoteGenerationService {
 enum NoteGenerationError: LocalizedError {
     case claudeFailed(Int, String)
     case claudeNotFound
+    case claudeTimedOut(Int)
 
     var errorDescription: String? {
         switch self {
@@ -291,6 +332,8 @@ enum NoteGenerationError: LocalizedError {
             return "claude -p failed (code \(code)): \(err)"
         case .claudeNotFound:
             return "Claude CLI not found. Install it from https://claude.ai/code"
+        case .claudeTimedOut(let seconds):
+            return "claude -p timed out after \(seconds)s"
         }
     }
 }
