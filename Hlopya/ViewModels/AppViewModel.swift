@@ -12,6 +12,7 @@ final class AppViewModel {
     let noteGeneration = NoteGenerationService()
     let obsidianExporter = ObsidianExporter()
     let vocabularyService = VocabularyService()
+    let audioImport = AudioImportService()
 
     // State
     var selectedSessionId: String?
@@ -42,6 +43,32 @@ final class AppViewModel {
 
     var selectedSession: Session? {
         sessionManager.sessions.first { $0.id == selectedSessionId }
+    }
+
+    init() {
+        audioImport.sessionManager = sessionManager
+    }
+
+    // MARK: - Import
+
+    func importAudio(urls: [URL]) async {
+        let (succeeded, failures) = await audioImport.importFiles(urls)
+
+        if failures.isEmpty {
+            let noun = succeeded == 1 ? "session" : "sessions"
+            audioSavedMessage = "Imported \(succeeded) \(noun). Click Transcribe to process."
+        } else if succeeded > 0 {
+            let names = failures.map(\.filename).joined(separator: ", ")
+            audioSavedMessage = "Imported \(succeeded), failed: \(names)"
+        } else {
+            let names = failures.map(\.filename).joined(separator: ", ")
+            audioSavedMessage = "Import failed: \(names)"
+        }
+
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(8))
+            if audioSavedMessage != nil { audioSavedMessage = nil }
+        }
     }
 
     // MARK: - Recording
