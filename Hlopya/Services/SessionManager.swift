@@ -7,10 +7,10 @@ import Foundation
 final class SessionManager {
     var sessions: [Session] = []
 
-    private let recordingsDir: URL
+    /// Always reflects the current `outputDir` setting (via Session.recordingsDirectory).
+    private var recordingsDir: URL { Session.recordingsDirectory }
 
     init() {
-        self.recordingsDir = Session.recordingsDirectory
         migrateMetaIfNeeded()
         loadSessions()
     }

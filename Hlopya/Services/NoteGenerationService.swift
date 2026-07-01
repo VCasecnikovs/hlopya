@@ -64,15 +64,26 @@ final class NoteGenerationService {
         // Wait with timeout
         let result = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<String, Error>) in
             DispatchQueue.global().async {
+                // Drain stdout and stderr concurrently BEFORE waiting for exit. A large
+                // reply (e.g. long meetings) exceeds the 64 KB pipe buffer, so Claude would
+                // block on write while we block in waitUntilExit() — a deadlock. Reading to
+                // EOF drains the pipes as Claude writes; waitUntilExit() then returns at once.
+                let errHandle = errorPipe.fileHandleForReading
+                var errData = Data()
+                let errQueue = DispatchQueue(label: "hlopya.claude.stderr")
+                errQueue.async { errData = (try? errHandle.readToEnd()) ?? Data() }
+
+                let outData = (try? outputPipe.fileHandleForReading.readToEnd()) ?? Data()
                 process.waitUntilExit()
+                errQueue.sync {}
 
                 if process.terminationStatus != 0 {
-                    let stderr = String(data: errorPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+                    let stderr = String(data: errData, encoding: .utf8) ?? ""
                     continuation.resume(throwing: NoteGenerationError.claudeFailed(Int(process.terminationStatus), stderr))
                     return
                 }
 
-                let stdout = String(data: outputPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+                let stdout = String(data: outData, encoding: .utf8) ?? ""
                 continuation.resume(returning: stdout)
             }
         }

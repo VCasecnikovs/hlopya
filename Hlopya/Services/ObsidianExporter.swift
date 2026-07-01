@@ -1,14 +1,17 @@
 import Foundation
 
-/// Exports meeting notes to Obsidian vault at ~/Documents/MyBrain/Meetings/
+/// Exports meeting notes as Markdown into the configured notes folder
+/// (the `obsidianVault` setting). One `.md` per session, written directly
+/// into that folder (no implicit subfolder).
 final class ObsidianExporter {
 
-    let meetingsDir: URL
+    let notesDir: URL
 
-    init(vaultPath: String = "~/Documents/MyBrain") {
-        let expanded = NSString(string: vaultPath).expandingTildeInPath
-        self.meetingsDir = URL(fileURLWithPath: expanded).appendingPathComponent("Meetings")
-        try? FileManager.default.createDirectory(at: meetingsDir, withIntermediateDirectories: true)
+    init(vaultPath: String? = nil) {
+        let raw = vaultPath ?? UserDefaults.standard.string(forKey: "obsidianVault") ?? "~/Documents/MyBrain"
+        let expanded = NSString(string: raw).expandingTildeInPath
+        self.notesDir = URL(fileURLWithPath: expanded, isDirectory: true)
+        try? FileManager.default.createDirectory(at: notesDir, withIntermediateDirectories: true)
     }
 
     /// Export notes to Obsidian markdown format
@@ -18,7 +21,7 @@ final class ObsidianExporter {
             .replacingOccurrences(of: "/", with: "-")
             .replacingOccurrences(of: ":", with: "-")
         let fileName = "\(sessionId.prefix(10)) \(safeTitle).md"
-        let filePath = meetingsDir.appendingPathComponent(fileName)
+        let filePath = notesDir.appendingPathComponent(fileName)
 
         var md = "---\n"
         md += "date: \(notes.date ?? String(sessionId.prefix(10)))\n"

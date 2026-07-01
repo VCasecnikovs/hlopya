@@ -30,12 +30,15 @@ struct Session: Identifiable, Codable, Hashable {
 
     // MARK: - Static
 
-    static let recordingsDirectory: URL = {
-        let url = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("recordings")
+    /// Root folder for recording sessions. Honors the `outputDir` setting
+    /// (Settings → Output Directory); falls back to ~/recordings.
+    static var recordingsDirectory: URL {
+        let raw = UserDefaults.standard.string(forKey: "outputDir") ?? "~/recordings"
+        let expanded = NSString(string: raw).expandingTildeInPath
+        let url = URL(fileURLWithPath: expanded, isDirectory: true)
         try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         return url
-    }()
+    }
 
     static let dateFormatter: DateFormatter = {
         let f = DateFormatter()
