@@ -71,13 +71,15 @@ final class TranscriptionService {
         }
 
         let startTime = Date()
-        let micPath = sessionDir.appendingPathComponent("mic.wav").path
-        let sysPath = sessionDir.appendingPathComponent("system.wav").path
+        guard let micURL = SessionAudio.url(in: sessionDir, track: "mic"),
+              let sysURL = SessionAudio.url(in: sessionDir, track: "system") else {
+            throw TranscriptionError.noAudioFiles
+        }
 
         // Load audio samples
         let converter = AudioConverter()
-        let micSamples = try converter.resampleAudioFile(path: micPath)
-        let sysSamples = try converter.resampleAudioFile(path: sysPath)
+        let micSamples = try converter.resampleAudioFile(path: micURL.path)
+        let sysSamples = try converter.resampleAudioFile(path: sysURL.path)
 
         // Echo cancellation
         print("[Transcription] Removing echo from mic channel...")

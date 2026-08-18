@@ -119,8 +119,8 @@ final class SessionManager {
                 let id = url.lastPathComponent
                 let dir = url
 
-                let hasMic = fm.fileExists(atPath: dir.appendingPathComponent("mic.wav").path)
-                let hasSys = fm.fileExists(atPath: dir.appendingPathComponent("system.wav").path)
+                let hasMic = SessionAudio.exists(in: dir, track: "mic")
+                let hasSys = SessionAudio.exists(in: dir, track: "system")
                 let hasTranscript = fm.fileExists(atPath: dir.appendingPathComponent("transcript.json").path)
                 let hasNotes = fm.fileExists(atPath: dir.appendingPathComponent("notes.json").path)
                 let hasPersonalNotes = fm.fileExists(atPath: dir.appendingPathComponent("personal_notes.md").path)

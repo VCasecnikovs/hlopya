@@ -77,10 +77,8 @@ struct AudioPlayerView: View {
         }
         .task(id: sessionId) {
             let dir = Session.recordingsDirectory.appendingPathComponent(sessionId)
-            let micURL = dir.appendingPathComponent("mic.wav")
-            let sysURL = dir.appendingPathComponent("system.wav")
-            if FileManager.default.fileExists(atPath: micURL.path) &&
-               FileManager.default.fileExists(atPath: sysURL.path) {
+            if let micURL = SessionAudio.url(in: dir, track: "mic"),
+               let sysURL = SessionAudio.url(in: dir, track: "system") {
                 player.load(micURL: micURL, systemURL: sysURL)
                 isLoaded = true
             }
