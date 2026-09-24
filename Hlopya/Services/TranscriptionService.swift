@@ -1,7 +1,8 @@
 import Foundation
 import FluidAudio
 
-/// Transcription service using FluidAudio's Parakeet v3 CoreML model.
+/// Transcription service using FluidAudio's Parakeet v3 CoreML model,
+/// with Nemotron 3 Diarization splitting each track into speakers.
 /// Replaces the Python transcriber.py pipeline.
 @MainActor
 @Observable
@@ -16,6 +17,7 @@ final class TranscriptionService {
 
     private var asrManager: AsrManager?
     private var models: AsrModels?
+    private var diarizer: Nemotron3Diarizer?
 
     /// Download and load the Parakeet v3 model (~400MB).
     /// Model files are cached on disk after first download, so subsequent loads
@@ -47,6 +49,7 @@ final class TranscriptionService {
     func unloadModel() {
         asrManager = nil
         models = nil
+        diarizer = nil
         isModelLoaded = false
         print("[TranscriptionService] Model unloaded from memory")
     }
@@ -88,14 +91,22 @@ final class TranscriptionService {
 
         // Transcribe both channels
         print("[Transcription] Transcribing mic (Me)...")
-        let micResult = try await asr.transcribe(cleanedMic, source: .microphone)
+        let decoderLayers = await asr.decoderLayerCount
+        var micState = TdtDecoderState.make(decoderLayers: decoderLayers)
+        let micResult = try await asr.transcribe(cleanedMic, decoderState: &micState)
 
         print("[Transcription] Transcribing system (Them)...")
-        let sysResult = try await asr.transcribe(sysSamples, source: .system)
+        var sysState = TdtDecoderState.make(decoderLayers: decoderLayers)
+        let sysResult = try await asr.transcribe(sysSamples, decoderState: &sysState)
+
+        // Diarize both channels; failure falls back to plain Me/Them
+        let diarizer = await loadDiarizer()
+        let micActivity = diarize(cleanedMic, with: diarizer)
+        let sysActivity = diarize(sysSamples, with: diarizer)
 
         // Build segments from results
-        let micSegments = buildSegments(from: micResult, speaker: "Me")
-        let sysSegments = buildSegments(from: sysResult, speaker: "Them")
+        let micSegments = buildSegments(from: micResult, activity: micActivity, isMic: true)
+        let sysSegments = buildSegments(from: sysResult, activity: sysActivity, isMic: false)
 
         // Merge, sort, and deduplicate echo segments
         var allSegments = micSegments + sysSegments
@@ -131,11 +142,11 @@ final class TranscriptionService {
             fullText: fullText,
             plainText: allSegments.map { $0.text }.joined(separator: " "),
             meText: allSegments.filter { $0.speaker == "Me" }.map { $0.text }.joined(separator: " "),
-            themText: allSegments.filter { $0.speaker == "Them" }.map { $0.text }.joined(separator: " "),
+            themText: allSegments.filter { $0.speaker.hasPrefix("Them") }.map { $0.text }.joined(separator: " "),
             numSegments: allSegments.count,
             durationSeconds: audioDuration,
             processingTime: elapsed,
-            modelUsed: "parakeet-v3-coreml",
+            modelUsed: diarizer != nil ? "parakeet-v3-coreml+nemotron3-diarization" : "parakeet-v3-coreml",
             confidence: overallConfidence,
             rtfx: rtfx
         )
@@ -144,13 +155,45 @@ final class TranscriptionService {
         return result
     }
 
-    private func buildSegments(from result: ASRResult, speaker: String) -> [TranscriptSegment] {
+    /// Load Nemotron 3 Diarization (~190MB, downloaded once). Returns nil if unavailable.
+    private func loadDiarizer() async -> Nemotron3Diarizer? {
+        if let diarizer { return diarizer }
+        do {
+            let config = Nemotron3Config.fast128
+            let models = try await Nemotron3Models.loadFromHuggingFace(config: config)
+            diarizer = Nemotron3Diarizer(config: config, models: models)
+            print("[TranscriptionService] Nemotron 3 Diarization loaded")
+        } catch {
+            print("[TranscriptionService] Diarization unavailable: \(error.localizedDescription)")
+        }
+        return diarizer
+    }
+
+    private func diarize(_ samples: [Float], with diarizer: Nemotron3Diarizer?) -> SpeakerActivity? {
+        guard let diarizer, !samples.isEmpty else { return nil }
+        do {
+            let started = Date()
+            let (probs, frames) = try diarizer.processComplete(samples)
+            print("[Transcription] Diarized \(samples.count / 16000)s of audio in \(String(format: "%.1f", Date().timeIntervalSince(started)))s")
+            return SpeakerActivity(probabilities: probs, frameCount: frames, numSpeakers: diarizer.config.numSpeakers)
+        } catch {
+            print("[Transcription] Diarization failed: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    private func buildSegments(from result: ASRResult, activity: SpeakerActivity?, isMic: Bool) -> [TranscriptSegment] {
         let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return [] }
+        let speaker = isMic ? "Me" : "Them"
 
         // Use token timings if available (Parakeet v3 provides these)
         if let timings = result.tokenTimings, !timings.isEmpty {
-            return buildSegmentsFromTimings(timings, speaker: speaker, audioDuration: result.duration)
+            let words = SpeakerLabeling.words(from: timings, activity: activity)
+            let labels = isMic ? SpeakerLabeling.micLabels(for: words) : SpeakerLabeling.systemLabels(for: words)
+            return buildSegmentsFromWords(words) { word in
+                word.speaker.flatMap { labels[$0] } ?? speaker
+            }
         }
 
         // Fallback: distribute evenly across audio duration
@@ -168,10 +211,11 @@ final class TranscriptionService {
         }
     }
 
-    /// Group token timings into sentence-level segments with real timestamps
-    private func buildSegmentsFromTimings(_ timings: [TokenTiming], speaker: String, audioDuration: TimeInterval) -> [TranscriptSegment] {
+    /// Group words into sentence-level segments with real timestamps, splitting on speaker changes
+    private func buildSegmentsFromWords(_ words: [SpeakerLabeling.Word], label: (SpeakerLabeling.Word) -> String) -> [TranscriptSegment] {
         var segments: [TranscriptSegment] = []
         var currentTokens: [TokenTiming] = []
+        var currentSpeaker = ""
 
         // Sentence-ending punctuation
         let sentenceEnders: Set<Character> = [".", "!", "?"]
@@ -180,10 +224,18 @@ final class TranscriptionService {
         // Maximum segment duration before forcing a split
         let maxSegmentDuration: Double = 30.0
 
-        for timing in timings {
-            currentTokens.append(timing)
+        for word in words {
+            let speaker = label(word)
+            if speaker != currentSpeaker, !currentTokens.isEmpty {
+                if let seg = makeSegment(from: currentTokens, speaker: currentSpeaker) {
+                    segments.append(seg)
+                }
+                currentTokens = []
+            }
+            currentSpeaker = speaker
+            currentTokens.append(contentsOf: word.tokens)
 
-            let tokenText = timing.token.trimmingCharacters(in: .whitespaces)
+            let tokenText = word.tokens.last?.token.trimmingCharacters(in: .whitespaces) ?? ""
             let endsWithPunctuation = tokenText.last.map { sentenceEnders.contains($0) } ?? false
             let segmentDuration = (currentTokens.last?.endTime ?? 0) - (currentTokens.first?.startTime ?? 0)
 
@@ -192,7 +244,7 @@ final class TranscriptionService {
                 || segmentDuration >= maxSegmentDuration
 
             if shouldSplit {
-                if let seg = makeSegment(from: currentTokens, speaker: speaker) {
+                if let seg = makeSegment(from: currentTokens, speaker: currentSpeaker) {
                     segments.append(seg)
                 }
                 currentTokens = []
@@ -201,7 +253,7 @@ final class TranscriptionService {
 
         // Flush remaining tokens
         if !currentTokens.isEmpty {
-            if let seg = makeSegment(from: currentTokens, speaker: speaker) {
+            if let seg = makeSegment(from: currentTokens, speaker: currentSpeaker) {
                 segments.append(seg)
             }
         }
@@ -220,12 +272,12 @@ final class TranscriptionService {
         return TranscriptSegment(speaker: speaker, start: start, end: end, text: text, confidence: avgConfidence)
     }
 
-    /// Remove "Me" segments that are echo duplicates of nearby "Them" segments.
+    /// Remove mic segments ("Me" / "Room N") that are echo duplicates of nearby system ("Them...") segments.
     /// The mic picks up speaker output, so the ASR may transcribe the same speech
     /// as both "Me" and "Them". We detect this by comparing word overlap within
     /// a time window and drop the "Me" segment (echo is always in the mic channel).
     private static func deduplicateEchoSegments(_ segments: [TranscriptSegment]) -> [TranscriptSegment] {
-        let themSegments = segments.filter { $0.speaker == "Them" }
+        let themSegments = segments.filter { $0.speaker.hasPrefix("Them") }
         guard !themSegments.isEmpty else { return segments }
 
         let stripPunctuation: (String) -> [String] = { text in
@@ -240,7 +292,7 @@ final class TranscriptionService {
         var echoIndices = Set<Int>()
 
         for (i, seg) in segments.enumerated() {
-            guard seg.speaker == "Me" else { continue }
+            guard !seg.speaker.hasPrefix("Them") else { continue }
 
             let meWords = stripPunctuation(seg.text)
             guard !meWords.isEmpty else { continue }

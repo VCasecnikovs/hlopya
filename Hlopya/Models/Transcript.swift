@@ -4,7 +4,7 @@ import Foundation
 struct TranscriptSegment: Codable, Identifiable {
     var id: String { "\(speaker)-\(start)-\(end)" }
 
-    let speaker: String   // "Me" or "Them"
+    let speaker: String   // "Me", "Room N" (mic), "Them" or "Them N" (system)
     let start: Double     // seconds
     let end: Double       // seconds
     let text: String

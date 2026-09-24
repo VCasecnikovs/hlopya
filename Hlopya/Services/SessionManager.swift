@@ -317,7 +317,9 @@ final class SessionManager {
 
         // Save name mapping in meta
         var nameMap = loadMeta(sessionDir: dir)?.participantNames ?? [:]
-        if oldName.lowercased().hasPrefix("them") || nameMap["Them"] == oldName {
+        if oldName.range(of: #"^(Them|Room) \d+$"#, options: .regularExpression) != nil {
+            nameMap[oldName] = newName
+        } else if oldName.lowercased().hasPrefix("them") || nameMap["Them"] == oldName {
             nameMap["Them"] = newName
         } else if oldName.lowercased().hasPrefix("me") || oldName.lowercased().hasPrefix("vadim") || nameMap["Me"] == oldName {
             nameMap["Me"] = newName
