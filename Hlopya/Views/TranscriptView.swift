@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Displays transcript with speaker-colored segments.
-/// Me = green, Them = cyan. Clean layout with copy button.
+/// Me = green, Room N = purple, Them / Them N = cyan family. Clean layout with copy button.
 struct TranscriptView: View {
     let markdown: String
     let participantNames: [String: String]
@@ -20,6 +20,12 @@ struct TranscriptView: View {
                 HStack(spacing: HlopSpacing.xs) {
                     Circle().fill(HlopColors.statusThem).frame(width: 6, height: 6)
                     Text("Them").font(HlopTypography.footnote).foregroundStyle(.secondary)
+                }
+                if lines.contains(where: { $0.speaker?.hasPrefix("Room") == true }) {
+                    HStack(spacing: HlopSpacing.xs) {
+                        Circle().fill(HlopColors.statusRoom).frame(width: 6, height: 6)
+                        Text("Room").font(HlopTypography.footnote).foregroundStyle(.secondary)
+                    }
                 }
                 Spacer()
                 Button {
@@ -71,8 +77,8 @@ struct TranscriptView: View {
                     return nil
                 }
 
-                // Parse: **Speaker** [timestamp]: text
-                if trimmed.range(of: #"\*\*(\w+)\*\*"#, options: .regularExpression) != nil {
+                // Parse: **Speaker** [timestamp]: text (speaker may be "Them 2", "Room 1")
+                if trimmed.range(of: #"^\*\*[^*]+\*\*"#, options: .regularExpression) != nil {
                     var parsed = parseSegmentLine(trimmed)
                     // Match confidence from transcript segments by order
                     if segmentIndex < segments.count {
@@ -139,7 +145,7 @@ struct TranscriptLineView: View {
             if let speaker = line.displaySpeaker {
                 Text(speaker)
                     .font(HlopTypography.body).fontWeight(.semibold)
-                    .foregroundStyle(line.isMe ? HlopColors.statusMe : HlopColors.statusThem)
+                    .foregroundStyle(line.isMe ? HlopColors.statusMe : HlopColors.speaker(line.speaker ?? ""))
                     .frame(width: 80, alignment: .trailing)
             }
 

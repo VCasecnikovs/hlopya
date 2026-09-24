@@ -17,9 +17,21 @@ enum HlopColors {
     static let statusMe = Color.green
     static let statusSTT = Color.cyan
     static let statusThem = Color.cyan
+    static let statusRoom = Color.purple
     static let statusNew = Color.orange
     static let statusWarning = Color.orange
     static let statusProcessing = Color.purple
+
+    // MARK: - Speakers
+
+    /// Me = green, in-room voices (Room N) = purple, remote voices (Them / Them N) = cyan-family per speaker
+    static func speaker(_ raw: String) -> Color {
+        if raw == "Me" || raw == "Vadim" { return statusMe }
+        if raw.hasPrefix("Room") { return statusRoom }
+        let remote: [Color] = [.cyan, .blue, .teal, .indigo, .mint]
+        let n = Int(raw.split(separator: " ").last ?? "") ?? 1
+        return remote[(max(n, 1) - 1) % remote.count]
+    }
 
     // MARK: - Surface
     static let surfaceGlass = Color.clear // glass effect handles this

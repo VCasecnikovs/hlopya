@@ -417,9 +417,8 @@ struct SessionDetailView: View {
             GeometryReader { geo in
                 HStack(spacing: 1) {
                     ForEach(sorted, id: \.key) { speaker, pct in
-                        let isMe = speaker == "Me" || speaker == "Vadim"
                         RoundedRectangle(cornerRadius: 2)
-                            .fill(isMe ? HlopColors.statusMe : HlopColors.statusThem)
+                            .fill(HlopColors.speaker(speaker))
                             .frame(width: max(geo.size.width * (pct / 100), 4))
                     }
                 }
@@ -429,11 +428,10 @@ struct SessionDetailView: View {
 
             HStack(spacing: 12) {
                 ForEach(sorted, id: \.key) { speaker, pct in
-                    let isMe = speaker == "Me" || speaker == "Vadim"
                     let displayName = names[speaker] ?? speaker
                     HStack(spacing: 4) {
                         Circle()
-                            .fill(isMe ? HlopColors.statusMe : HlopColors.statusThem)
+                            .fill(HlopColors.speaker(speaker))
                             .frame(width: 6, height: 6)
                         Text("\(displayName) \(Int(pct))%")
                             .font(.system(size: 11))
