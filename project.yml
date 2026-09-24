@@ -8,7 +8,7 @@ options:
 packages:
   FluidAudio:
     url: https://github.com/FluidInference/FluidAudio.git
-    from: 0.7.9
+    from: 0.17.0
   Yams:
     url: https://github.com/jpsim/Yams.git
     from: 5.0.0
