@@ -126,7 +126,7 @@ sign-notarize: fix-entitlements
 		DEVELOPMENT_TEAM=3S29L64542 \
 		OTHER_CODE_SIGN_FLAGS="--options=runtime --timestamp" \
 		CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO \
-		CODE_SIGN_ENTITLEMENTS=$(ENTITLEMENTS) \
+		CODE_SIGN_ENTITLEMENTS=$(CURDIR)/$(ENTITLEMENTS) \
 		build 2>&1 | tail -5
 	@echo "==> Re-signing Sparkle nested helpers with Developer ID..."
 	@IDENTITY="Developer ID Application: Maksimilians Maksimovs (3S29L64542)"; \
