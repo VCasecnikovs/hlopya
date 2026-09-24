@@ -32,6 +32,10 @@ final class AppViewModel {
     // Nub panel
     private var nubPanel: RecordingNubPanel?
 
+    // Call detection (auto-prompt to record meetings)
+    private let meetingDetector = MeetingDetector()
+    private var callPromptPanel: CallPromptPanel?
+
     // Detail data (loaded on selection)
     var detailTranscript: String?
     var detailTranscriptResult: TranscriptResult?
@@ -42,6 +46,14 @@ final class AppViewModel {
 
     var selectedSession: Session? {
         sessionManager.sessions.first { $0.id == selectedSessionId }
+    }
+
+    init() {
+        // Start watching for calls as soon as the app launches (lightweight
+        // Core Audio poll). Deferred so `self` is fully initialized first.
+        Task { @MainActor [weak self] in
+            self?.startMeetingDetector()
+        }
     }
 
     // MARK: - Recording
@@ -469,6 +481,51 @@ final class AppViewModel {
     private func hideNub() {
         nubPanel?.close()
         nubPanel = nil
+    }
+
+    // MARK: - Call Detection
+
+    func startMeetingDetector() {
+        meetingDetector.isRecordingProvider = { [weak self] in
+            self?.audioCapture.isRecording ?? false
+        }
+        meetingDetector.onCallDetected = { [weak self] app in
+            self?.showCallPrompt(for: app)
+        }
+        meetingDetector.start()
+    }
+
+    private func showCallPrompt(for app: MeetingDetector.DetectedApp) {
+        guard callPromptPanel == nil, !audioCapture.isRecording else { return }
+
+        let panel = CallPromptPanel(
+            appName: app.name,
+            onRecord: { [weak self] in
+                self?.dismissCallPrompt()
+                Task { @MainActor in await self?.startRecording() }
+            },
+            onDismiss: { [weak self] in
+                self?.dismissCallPrompt()
+            },
+            onBlacklist: { [weak self] in
+                MeetingDetector.addToBlacklist(app.bundleId)
+                self?.dismissCallPrompt()
+            }
+        )
+        callPromptPanel = panel
+        panel.orderFront(nil)
+
+        // Auto-dismiss if ignored, but only if this exact panel is still up.
+        Task { @MainActor [weak self, weak panel] in
+            try? await Task.sleep(for: .seconds(30))
+            guard let self, self.callPromptPanel === panel else { return }
+            self.dismissCallPrompt()
+        }
+    }
+
+    private func dismissCallPrompt() {
+        callPromptPanel?.close()
+        callPromptPanel = nil
     }
 }
 

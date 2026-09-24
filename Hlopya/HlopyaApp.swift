@@ -25,6 +25,12 @@ struct HlopyaApp: App {
         if !defaults.bool(forKey: "showDockIcon") {
             NSApplication.shared.setActivationPolicy(.accessory)
         }
+        // Auto-prompt to record calls is on by default. The ignore-list starts
+        // empty — users add their dictation apps in Settings so those don't
+        // trigger a prompt.
+        if defaults.object(forKey: "autoPromptCalls") == nil {
+            defaults.set(true, forKey: "autoPromptCalls")
+        }
     }
 
     var body: some Scene {

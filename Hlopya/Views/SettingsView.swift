@@ -1,5 +1,6 @@
 import ServiceManagement
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// App preferences
 struct SettingsView: View {
@@ -13,6 +14,8 @@ struct SettingsView: View {
     @AppStorage("setupComplete") private var setupComplete = false
     @AppStorage("showDockIcon") private var showDockIcon = true
     @AppStorage("showMenuBar") private var showMenuBar = true
+    @AppStorage("autoPromptCalls") private var autoPromptCalls = true
+    @State private var callBlacklist: [String] = []
     @State private var claudeCliPath: String? = nil
     @State private var isCheckingClaude = true
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
@@ -34,6 +37,39 @@ struct SettingsView: View {
                 Text("Automatically transcribe and generate AI notes when recording stops")
                     .font(HlopTypography.footnote)
                     .foregroundStyle(.tertiary)
+            }
+
+            Section("Auto-record calls") {
+                Toggle("Prompt to record when a call starts", isOn: $autoPromptCalls)
+                Text("When an app starts using your microphone (Zoom, Google Meet, Teams…), Hlopya offers to record. Detection runs locally and needs no extra permission.")
+                    .font(HlopTypography.footnote)
+                    .foregroundStyle(.tertiary)
+
+                if autoPromptCalls {
+                    ForEach(callBlacklist, id: \.self) { bid in
+                        HStack {
+                            Text(appDisplayName(for: bid))
+                                .font(HlopTypography.footnote)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            Spacer()
+                            Button {
+                                MeetingDetector.removeFromBlacklist(bid)
+                                reloadBlacklist()
+                            } label: {
+                                Image(systemName: "minus.circle.fill")
+                                    .foregroundStyle(.secondary)
+                            }
+                            .buttonStyle(.plain)
+                            .help("Stop ignoring this app")
+                        }
+                    }
+                    Button("Add App to Ignore List…") { addAppToBlacklist() }
+                        .controlSize(.small)
+                    Text("Ignored apps never trigger a prompt — add your dictation app, for example.")
+                        .font(HlopTypography.footnote)
+                        .foregroundStyle(.tertiary)
+                }
             }
 
             Section("Appearance") {
@@ -167,6 +203,7 @@ struct SettingsView: View {
         .frame(width: 450)
         .padding()
         .task {
+            reloadBlacklist()
             isCheckingClaude = true
             let path = await Task.detached {
                 let p = NoteGenerationService.findClaudeCLI()
@@ -174,6 +211,37 @@ struct SettingsView: View {
             }.value
             claudeCliPath = path
             isCheckingClaude = false
+        }
+    }
+
+    // MARK: - Call-prompt blacklist
+
+    private func reloadBlacklist() {
+        callBlacklist = MeetingDetector.blacklistedBundleIds().sorted()
+    }
+
+    /// Pretty name for a bundle id, e.g. "Zoom  ·  us.zoom.xos".
+    private func appDisplayName(for bundleId: String) -> String {
+        if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleId) {
+            let name = FileManager.default.displayName(atPath: url.path)
+            let trimmed = name.hasSuffix(".app") ? String(name.dropLast(4)) : name
+            return "\(trimmed)  ·  \(bundleId)"
+        }
+        return bundleId
+    }
+
+    private func addAppToBlacklist() {
+        let panel = NSOpenPanel()
+        panel.title = "Choose an app to ignore"
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.application]
+        panel.directoryURL = URL(fileURLWithPath: "/Applications")
+        if panel.runModal() == .OK, let url = panel.url,
+           let bid = Bundle(url: url)?.bundleIdentifier {
+            MeetingDetector.addToBlacklist(bid)
+            reloadBlacklist()
         }
     }
 }
