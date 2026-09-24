@@ -6,6 +6,14 @@
     <description>Hlopya updates</description>
     <language>en</language>
     <item>
+      <title>Version 2.10.1</title>
+      <pubDate>Thu, 24 Sep 2026 01:51:01 +0000</pubDate>
+      <sparkle:version>1</sparkle:version>
+      <sparkle:shortVersionString>2.10.1</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.2</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/VCasecnikovs/hlopya/releases/download/v2.10.1/Hlopya.zip" length="13293287" type="application/octet-stream" sparkle:edSignature="jr7vWqgRttHfbHmacEDiFJQekOmMjCMUAYzq4ZK0XSZLVSX4Pw6PXKfyNBjh8HJ0BiChgoWCPGiaI8FXIYkOAw==" />
+    </item>
+    <item>
       <title>Version 2.10.0</title>
       <pubDate>Thu, 24 Sep 2026 01:31:07 +0000</pubDate>
       <sparkle:version>1</sparkle:version>
