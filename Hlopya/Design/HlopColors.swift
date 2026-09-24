@@ -24,13 +24,14 @@ enum HlopColors {
 
     // MARK: - Speakers
 
-    /// Me = green, in-room voices (Room N) = purple, remote voices (Them / Them N) = cyan-family per speaker
+    /// Me = green, in-room voices (Room N) = purple family, remote voices (Them / Them N) = cyan family
     static func speaker(_ raw: String) -> Color {
         if raw == "Me" || raw == "Vadim" { return statusMe }
-        if raw.hasPrefix("Room") { return statusRoom }
-        let remote: [Color] = [.cyan, .blue, .teal, .indigo, .mint]
+        let palette: [Color] = raw.hasPrefix("Room")
+            ? [statusRoom, .pink, .brown, .yellow]
+            : [.cyan, .blue, .teal, .indigo, .mint]
         let n = Int(raw.split(separator: " ").last ?? "") ?? 1
-        return remote[(max(n, 1) - 1) % remote.count]
+        return palette[(max(n, 1) - 1) % palette.count]
     }
 
     // MARK: - Surface

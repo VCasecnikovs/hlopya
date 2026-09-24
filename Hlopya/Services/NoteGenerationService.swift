@@ -244,7 +244,7 @@ final class NoteGenerationService {
         let diarized = transcript.segments.contains { $0.speaker.hasPrefix("Room ") || $0.speaker.hasPrefix("Them ") }
         let participantNote: String
         if diarized {
-            participantNote = "\nNote: Speakers were separated by voice. \"Me\" is the user; \"Room N\" are other people on the user's microphone (same room); \"Them N\" are distinct remote voices from the call audio. Map these labels to participant names (\(otherParticipants)) from context when possible. Voice separation can occasionally split one person or merge two."
+            participantNote = "\nNote: Speakers were separated by voice. \"Me\" is the user when they were alone at the microphone; \"Room N\" are distinct voices on the user's microphone (same room) - one of them is the user, identify which from context; \"Them N\" are distinct remote voices from the call audio. Map these labels to participant names (\(otherParticipants)) from context when possible. Voice separation can occasionally split one person or merge two."
         } else if otherParticipants.contains(",") {
             participantNote = "\nNote: The transcript only has \"Me\" and \"Them\" audio channels. \"Them\" includes multiple participants (\(otherParticipants)). Attribute utterances to the correct person based on context when possible."
         } else {

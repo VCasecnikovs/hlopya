@@ -110,18 +110,12 @@ enum SpeakerLabeling {
         return Dictionary(uniqueKeysWithValues: order.enumerated().map { ($1, "Them \($0 + 1)") })
     }
 
-    /// Mic track: the voice with the most talk time is "Me"; other in-room voices are "Room 1", "Room 2"...
+    /// Mic track: one voice stays "Me"; several become "Room 1", "Room 2"... in arrival order.
+    /// No guess at which of them is the user - talk time can't tell.
     static func micLabels(for words: [Word]) -> [Int: String] {
-        var talkTime: [Int: Double] = [:]
-        for word in words {
-            if let spk = word.speaker { talkTime[spk, default: 0] += max(word.end - word.start, 0) }
-        }
-        guard let me = talkTime.max(by: { $0.value < $1.value })?.key else { return [:] }
-        var labels = [me: "Me"]
-        for (n, spk) in arrivalOrder(words).filter({ $0 != me }).enumerated() {
-            labels[spk] = "Room \(n + 1)"
-        }
-        return labels
+        let order = arrivalOrder(words)
+        guard order.count > 1 else { return Dictionary(uniqueKeysWithValues: order.map { ($0, "Me") }) }
+        return Dictionary(uniqueKeysWithValues: order.enumerated().map { ($1, "Room \($0 + 1)") })
     }
 
     private static func arrivalOrder(_ words: [Word]) -> [Int] {
