@@ -61,6 +61,48 @@ enum SpeakerLabeling {
         return words
     }
 
+    /// Drop mic words from a secondary voice while the call audio is active: that's the
+    /// remote side leaking into the mic, not someone in the room.
+    static func dropEcho(_ words: [Word], system: SpeakerActivity?) -> [Word] {
+        guard let system else { return words }
+        var wordCount: [Int: Int] = [:]
+        for word in words {
+            if let spk = word.speaker { wordCount[spk, default: 0] += 1 }
+        }
+        guard let dominant = wordCount.max(by: { $0.value < $1.value })?.key else { return words }
+        return words.filter { word in
+            word.speaker == dominant || system.dominantSpeaker(start: word.start, end: word.end) == nil
+        }
+    }
+
+    /// Fold speakers who say few words into their neighbours. The diarizer sometimes splits
+    /// one person into extra slots (a change of language or tone, a mumble, echo residue).
+    /// Word counts, not durations: sparse words spanning long pauses inflate durations.
+    static func mergeMinorSpeakers(_ words: [Word], minShareOfDominant: Double, minWords: Int) -> [Word] {
+        var wordCount: [Int: Int] = [:]
+        for word in words {
+            if let spk = word.speaker { wordCount[spk, default: 0] += 1 }
+        }
+        let dominant = Double(wordCount.values.max() ?? 0)
+        let minor = Set(wordCount.filter { Double($0.value) < max(Double(minWords), dominant * minShareOfDominant) }.keys)
+        guard !minor.isEmpty, minor.count < wordCount.count else { return words }
+
+        var merged = words
+        var previous: Int?
+        for i in merged.indices {
+            if let spk = merged[i].speaker, minor.contains(spk) {
+                merged[i].speaker = previous
+            } else if merged[i].speaker != nil {
+                previous = merged[i].speaker
+            }
+        }
+        // Leading minor words take the first remaining speaker
+        if let firstKnown = merged.first(where: { $0.speaker != nil })?.speaker {
+            for i in merged.indices where merged[i].speaker == nil { merged[i].speaker = firstKnown }
+        }
+        return merged
+    }
+
     /// System track: one voice stays "Them"; several become "Them 1", "Them 2"... in arrival order.
     static func systemLabels(for words: [Word]) -> [Int: String] {
         let order = arrivalOrder(words)

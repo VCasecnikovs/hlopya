@@ -83,10 +83,11 @@ final class TranscriptionService {
 
         // Echo cancellation
         print("[Transcription] Removing echo from mic channel...")
-        let cleanedMic = EchoCancellation.removeEcho(
+        // Mic capture runs quiet (peaks around -33 dBFS); boost it so ASR hears distant voices
+        let cleanedMic = Self.normalized(EchoCancellation.removeEcho(
             micSamples: micSamples,
             systemSamples: sysSamples
-        )
+        ))
 
         // Save cleaned mic waveform for display (200 floats = 800 bytes)
         Self.saveWaveform(cleanedMic, buckets: 200, to: sessionDir.appendingPathComponent("mic_waveform.bin"))
@@ -107,7 +108,7 @@ final class TranscriptionService {
         let sysActivity = diarize(sysSamples, with: diarizer)
 
         // Build segments from results
-        let micSegments = buildSegments(from: micResult, activity: micActivity, isMic: true)
+        let micSegments = buildSegments(from: micResult, activity: micActivity, isMic: true, systemActivity: sysActivity)
         let sysSegments = buildSegments(from: sysResult, activity: sysActivity, isMic: false)
 
         // Merge, sort, and deduplicate echo segments
@@ -184,14 +185,23 @@ final class TranscriptionService {
         }
     }
 
-    private func buildSegments(from result: ASRResult, activity: SpeakerActivity?, isMic: Bool) -> [TranscriptSegment] {
+    private func buildSegments(
+        from result: ASRResult, activity: SpeakerActivity?, isMic: Bool, systemActivity: SpeakerActivity? = nil
+    ) -> [TranscriptSegment] {
         let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return [] }
         let speaker = isMic ? "Me" : "Them"
 
         // Use token timings if available (Parakeet v3 provides these)
         if let timings = result.tokenTimings, !timings.isEmpty {
-            let words = SpeakerLabeling.words(from: timings, activity: activity)
+            var words = SpeakerLabeling.words(from: timings, activity: activity)
+            if isMic { words = SpeakerLabeling.dropEcho(words, system: systemActivity) }
+            words = SpeakerLabeling.mergeMinorSpeakers(
+                words,
+                // Extra mic voices must be a real participant, not the user split in two
+                minShareOfDominant: isMic ? 0.25 : 0.1,
+                minWords: isMic ? 150 : 40
+            )
             let labels = isMic ? SpeakerLabeling.micLabels(for: words) : SpeakerLabeling.systemLabels(for: words)
             return buildSegmentsFromWords(words) { word in
                 word.speaker.flatMap { labels[$0] } ?? speaker
@@ -340,6 +350,17 @@ final class TranscriptionService {
         return segments.enumerated().compactMap { i, seg in
             echoIndices.contains(i) ? nil : seg
         }
+    }
+
+    /// Scale so the 99.9th-percentile peak sits at 0.9 (ignores clicks), gain capped at 50x.
+    static func normalized(_ samples: [Float]) -> [Float] {
+        guard !samples.isEmpty else { return samples }
+        let magnitudes = samples.map(abs).sorted()
+        let peak = magnitudes[min(magnitudes.count - 1, Int(Double(magnitudes.count) * 0.999))]
+        guard peak > 1e-5 else { return samples }
+        let gain = min(0.9 / peak, 50)
+        guard gain > 1.05 else { return samples }
+        return samples.map { max(-1, min(1, $0 * gain)) }
     }
 
     private static func saveWaveform(_ samples: [Float], buckets: Int, to url: URL) {
