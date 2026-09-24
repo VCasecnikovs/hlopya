@@ -26,7 +26,7 @@ targets:
         INFOPLIST_FILE: Hlopya/Info.plist
         CODE_SIGN_ENTITLEMENTS: Hlopya/Hlopya.entitlements
         PRODUCT_BUNDLE_IDENTIFIER: com.vadims.hlopya
-        MARKETING_VERSION: 2.10.1
+        MARKETING_VERSION: 2.10.2
         CURRENT_PROJECT_VERSION: 1
         SWIFT_VERSION: "5.9"
         MACOSX_DEPLOYMENT_TARGET: "15.0"
@@ -57,7 +57,7 @@ targets:
       base:
         INFOPLIST_FILE: HlopyaWatch/Info.plist
         PRODUCT_BUNDLE_IDENTIFIER: com.vadims.hlopya.watch
-        MARKETING_VERSION: 2.10.1
+        MARKETING_VERSION: 2.10.2
         CURRENT_PROJECT_VERSION: 1
         SWIFT_VERSION: "5.9"
         WATCHOS_DEPLOYMENT_TARGET: "10.0"
