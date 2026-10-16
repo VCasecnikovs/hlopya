@@ -7,6 +7,7 @@ struct SessionListView: View {
     @Binding var showSystem: Bool
     @State private var sessionToDelete: Session?
     @State private var meetingWith: String = ""
+    @State private var isDragTargeted = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -155,6 +156,31 @@ struct SessionListView: View {
                 .background(showSystem ? Color.accentColor.opacity(0.12) : .clear)
                 .clipShape(RoundedRectangle(cornerRadius: 6))
 
+                // Import button
+                Button {
+                    let panel = NSOpenPanel()
+                    panel.allowsMultipleSelection = true
+                    panel.canChooseDirectories = false
+                    panel.allowedContentTypes = AudioImportService.supportedTypes
+                    panel.prompt = "Import"
+                    if panel.runModal() == .OK {
+                        Task { await vm.importAudio(urls: panel.urls) }
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "square.and.arrow.down")
+                            .font(.system(size: 12))
+                        Text("Import audio...")
+                            .font(.system(size: 12))
+                        Spacer()
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                }
+                .buttonStyle(.plain)
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .disabled(vm.audioCapture.isRecording)
+
                 // Settings button
                 SettingsLink {
                     HStack(spacing: 6) {
@@ -216,6 +242,17 @@ struct SessionListView: View {
                 }
             }
             .listStyle(.sidebar)
+            .dropDestination(for: URL.self) { urls, _ in
+                Task { await vm.importAudio(urls: urls) }
+                return true
+            } isTargeted: { isDragTargeted = $0 }
+            .overlay {
+                if isDragTargeted {
+                    RoundedRectangle(cornerRadius: 6)
+                        .strokeBorder(Color.accentColor, lineWidth: 1.5)
+                        .allowsHitTesting(false)
+                }
+            }
         }
         .background(.ultraThinMaterial)
         .alert("Delete Recording?", isPresented: Binding(
