@@ -1,0 +1,21 @@
+{
+  "package_id": "com.vcasecnikovs.hlopya",
+  "edition": "202601",
+  "name": "Hlopya",
+  "version": "0.1.0",
+  "min_app_version": "2.2.10",
+  "min_sdk_version": "0.0.16",
+  "entrypoint": "index.html",
+  "permissions": [
+    {
+      "name": "g2-microphone",
+      "desc": "Records the conversation through the glasses microphones so Hlopya can transcribe it on your Mac."
+    },
+    {
+      "name": "network",
+      "desc": "Uploads finished recordings to your own Klava server, which hands them to Hlopya on your Mac.",
+      "whitelist": ["http://100.82.35.56:18788"]
+    }
+  ],
+  "supported_languages": ["en"]
+}

@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Hlopya</title>
+    <style>
+      :root { color-scheme: light dark; --accent: #7c3aed; --rec: #ef4444; }
+      body { font: 16px/1.4 -apple-system, system-ui, sans-serif; margin: 0; padding: 20px 16px; max-width: 480px; }
+      h1 { font-size: 22px; margin: 0 0 4px; }
+      #timer { font: 600 28px ui-monospace, monospace; margin: 16px 0 8px; }
+      #status { min-height: 1.4em; opacity: 0.75; }
+      button { width: 100%; padding: 14px; margin: 6px 0; border: 0; border-radius: 12px; font-size: 17px; font-weight: 600; background: var(--accent); color: white; }
+      button.recording { background: var(--rec); }
+      button.secondary { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+      button:disabled { opacity: 0.5; }
+      label { display: block; font-size: 13px; opacity: 0.7; margin-top: 14px; }
+      input { width: 100%; box-sizing: border-box; padding: 10px; font-size: 15px; border-radius: 8px; border: 1px solid #8884; background: transparent; color: inherit; }
+      details { margin-top: 20px; }
+    </style>
+  </head>
+  <body>
+    <h1>Hlopya</h1>
+    <div>Records through your G2 and sends it to Hlopya on your Mac.</div>
+    <p id="timer"></p>
+    <button id="toggle">Start recording</button>
+    <button id="sync" class="secondary">Send pending</button>
+    <p id="status"></p>
+    <label for="title">Title</label>
+    <input id="title" />
+    <details>
+      <summary>Server</summary>
+      <label for="server">Klava upload URL</label>
+      <input id="server" inputmode="url" />
+      <label for="token">Token (optional)</label>
+      <input id="token" />
+    </details>
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>
