@@ -14,7 +14,7 @@
     {
       "name": "network",
       "desc": "Uploads finished recordings to your own Klava server, which hands them to Hlopya on your Mac.",
-      "whitelist": ["http://100.82.35.56:18788"]
+      "whitelist": ["http://100.67.36.61:18788"]
     }
   ],
   "supported_languages": ["en"]

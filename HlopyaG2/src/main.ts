@@ -9,7 +9,7 @@ import { encodeWav, PcmRecorder } from './recorder'
 import { deletePending, listPending, savePending } from './store'
 import { upload } from './uploader'
 
-const DEFAULT_SERVER_URL = 'http://100.82.35.56:18788/api/hlopya/watch/upload'
+const DEFAULT_SERVER_URL = 'http://100.67.36.61:18788/api/hlopya/watch/upload'
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T
 const serverInput = $<HTMLInputElement>('server')

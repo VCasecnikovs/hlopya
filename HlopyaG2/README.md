@@ -43,7 +43,7 @@ and put the build on the beta channel.
 
 Even Hub only lets the app reach hosts listed in `app.json` →
 `permissions[network].whitelist`. It is set to the Klava Tailscale address used
-by the Watch app (`http://100.82.35.56:18788`). The phone must be on the tailnet.
+by the Watch app (`http://100.67.36.61:18788`). The phone must be on the tailnet.
 If you change the server URL in the app's settings, add the new origin to the
 whitelist and repack. If the Even app refuses plain `http`, expose Klava over
 HTTPS with `tailscale serve` and use the `https://<mac>.<tailnet>.ts.net` URL.
